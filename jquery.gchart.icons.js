@@ -1,5 +1,5 @@
 /* http://keith-wood.name/gChart.html
-   Google Chart icons extension for jQuery v1.4.2.
+   Google Chart icons extension for jQuery v1.4.3.
    See API details at http://code.google.com/apis/chart/.
    Written by Keith Wood (kbwood{at}iinet.com.au) September 2008.
    Dual licensed under the GPL (http://dev.jquery.com/browser/trunk/jquery/GPL-LICENSE.txt) and 
@@ -35,6 +35,11 @@ var ALIGNMENTS = {topLeft: 'lt', top: 'ht', topRight: 'rt', left: 'lv', center: 
 	hv: 'hv', r: 'rv', rv: 'rv', bl: 'lb', lb: 'lb', b: 'hb', hb: 'hb', br: 'rb', rb: 'rb'};
 /* Allowed sizes of icons. */
 var SIZES = {12: 12, 16: 16, 24: 24};
+/* Mapping from embedded chart alignment names to chart drawing alignment codes. */
+var EMBEDDED_ALIGNMENTS = {topLeft: 'tl', top: 'ht', topRight: 'tr', left: 'vl', center: 'hv', centre: 'hv',
+	right: 'vr', bottomLeft: 'lb', bottom: 'hb', bottomRight: 'rb',
+	tl: 'tl', t: 'ht', ht: 'ht', tr: 'tr', l: 'vl', vl: 'vl', c: 'hv',
+	hv: 'hv', r: 'vr', vr: 'vr', bl: 'lb', lb: 'lb', b: 'hb', hb: 'hb', br: 'rb', rb: 'rb'};
 
 $.extend($.gchart._defaults, {
 		icons: [] // Definitions of dynamic icons for the chart, each entry is an object with
@@ -1120,6 +1125,104 @@ $.extend($.gchart._prototype.prototype, {
 		return (ALIGNMENTS[position] || 'hv') +
 			(hOffset == 0 ? '-0' : (hOffset > 0 ? '%20' + hOffset : hOffset)) +
 			(vOffset == 0 ? '-0' : (vOffset > 0 ? '%20' + vOffset : vOffset));
+	},
+
+	/* Generate an embedded chart icon.
+	   @param  embeddedOptions  (object) the options for the embedded chart
+	   @param  bubble           (boolean, optional) true if embedded in a bubble (default false)
+	   @param  alignment        (string, optional) the type of tail to use for a bubble (default 'bottomLeft'),
+	                            or the alignment of a non-bubble icon (default 'bottomLeft')
+	   @param  padding          (number, optional) the padding inside the bubble in pixels (default 4)
+	   @param  frameColour      (string, optional) the colour of the frame border (default #00d0d0)
+	   @param  fillColour       (string, optional) the colour of the frame background (default #80ffff)
+	   @param  series           (number, optional) the series to which the icon applies
+	   @param  item             (number or string or number[2 or 3], optional)
+	                            the item in the series to which it applies or 'all' (default)
+	                            or 'everyn' or [start, end, every]
+	   @param  zIndex           (number, optional) the z-index (-1.0 to 1.0)
+	   @param  position         (number[2], optional) an absolute chart position (0.0 to 1.0)
+	   @param  offsets          (number[2], optional) pixel offsets
+	   @return  (object) the icon definition */
+	embeddedChart: function(embeddedOptions, bubble, alignment, padding, frameColour, fillColour,
+			series, item, zIndex, position, offsets) {
+		if (typeof bubble != 'boolean') {
+			offsets = position;
+			position = zIndex;
+			zIndex = item;
+			item = series;
+			series = fillColour;
+			fillColour = frameColour;
+			frameColour = padding;
+			padding = alignment;
+			alignment = bubble;
+			bubble = false;
+		}
+		if (typeof alignment != 'string') {
+			offsets = position;
+			position = zIndex;
+			zIndex = item;
+			item = series;
+			series = fillColour;
+			fillColour = frameColour;
+			frameColour = padding;
+			padding = alignment;
+			alignment = null;
+		}
+		if (!bubble) {
+			offsets = item;
+			position = series;
+			zIndex = fillColour;
+			item = frameColour;
+			series = padding;
+			fillColour = null;
+			frameColour = null;
+			padding = null;
+		}
+		else {
+			if (typeof padding != 'number') {
+				offsets = position;
+				position = zIndex;
+				zIndex = item;
+				item = series;
+				series = fillColour;
+				fillColour = frameColour;
+				frameColour = padding;
+				padding = null;
+			}
+			if (typeof frameColour != 'string') {
+				offsets = zIndex;
+				position = item;
+				zIndex = series;
+				item = fillColour;
+				series = frameColour;
+				fillColour = null;
+				frameColour = null;
+			}
+			else if (typeof fillColour != 'string') {
+				offsets = position;
+				position = zIndex;
+				zIndex = item;
+				item = series;
+				series = fillColour;
+				fillColour = null;
+			}
+		}
+		var encodeEmbedded = function(value) {
+			return value.replace(/%7c/ig, '|').replace(/@/g, '@@').replace(/%/g, '%25').
+				replace(/,/g, '@,').replace(/\|/g, '@|').replace(/;/g, '@;').
+				replace(/&/g, '%26').replace(/=/g, '%3D');
+		};
+		var allOptions = $.extend({}, $.gchart._defaults, {width: 120, height: 60}, embeddedOptions);
+		var embedded = $.gchart._generateChart(allOptions);
+		embedded = embedded.replace(/^[^\?]+\?/, '').split('&');
+		embedded = $.map(embedded, function(value) {
+			value = value.split('=');
+			return encodeEmbedded(value[0]) + ',' + encodeEmbedded(value[1]);
+		});
+		var data = (bubble ? (TAILS[alignment] || 'bb') + ',' + (padding == null ? 4 : padding) + ',' +
+			this.color(frameColour || '#00d0d0') + ',' + this.color(fillColour || '#80ffff') :
+			(EMBEDDED_ALIGNMENTS[alignment] || 'lb')) + ',' + embedded.join(',');
+		return this.icon('ec' + (bubble ? 'b' : ''), data, series, item, zIndex, position, offsets);
 	},
 
 	/* Generate dynamic icon parameters.
