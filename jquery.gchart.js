@@ -1,5 +1,5 @@
 /* http://keith-wood.name/gChart.html
-   Google Chart interface for jQuery v1.1.1.
+   Google Chart interface for jQuery v1.2.0.
    See API details at http://code.google.com/apis/chart/.
    Written by Keith Wood (kbwood@virginbroadband.com.au) September 2008.
    Dual licensed under the GPL (http://dev.jquery.com/browser/trunk/jquery/GPL-LICENSE.txt) and 
@@ -17,42 +17,46 @@ function GChart() {
 	this._defaults = {
 		width: 0, // Width of the chart
 		height: 0, // Height of the chart
+		margins: null, // The minimum margins (pixels) around the chart:
+			// all or [left/right, top/bottom] or [left, right, top, bottom]
 		title: '', // The title of the chart
 		titleColor: '', // The colour of the title
 		titleSize: 0, // The font size of the title
 		backgroundColor: null, // The background colour for the entire image
 		chartColor: null, // The background colour for the chart area
-		legend: '', // The location of the legend: top, bottom, left, right, or '' for none
+		legend: '', // The location of the legend: top, topVertical,
+			// bottom, bottomVertical, left, right, or '' for none
+		legendSize: null, // The minimum size (pixels) of the legend: [width, height]
 		type: 'pie3D', // Type of chart requested: line, lineXY, sparkline,
 			// barHoriz, barVert, barHorizGrouped, barVertGrouped, pie, pie3D (default),
-			// venn, scatter, radar, radarCurved, map, meter, qrCode
+			// pieConcentric, venn, scatter, radar, radarCurved, map, meter, qrCode
 		encoding: '', // Type of data encoding: text (default), scaled, simple, extended
-		series: [this.series('Hello', [60]), this.series('World', [40])], // Details about the values to be plotted
+		series: [this.series('Hello World', [60, 40])], // Details about the values to be plotted
+		visibleSeries: 0, // The number of series that are directly displayed, 0 for all
 		dataLabels: [], // Labels for the values across all the series
 		axes: [], // Definitions for the various axes, each entry is either
-			// a string of the axis name or an object with
-			// axis (x, y, top, left, bottom, right), labels (string[], optional),
-			// positions (number[], optional), and range (number[2], optional),
-			// color (string, optional), alignment (string, optional),
-			// and size (number, optional) attributes
+			// a string of the axis name or a GChartAxis object
 		ranges: [], // Definitions of ranges for the chart, each entry is an object with
 			// vertical (boolean), color (string), start (number, 0-1),
 			// and end (number, 0-1) attributes
 		markers: [], // Definitions of markers for the chart, each entry is an object with
-			// shape (arrow, circle, cross, diamond, down, horizontal,
-			// plus, sparkfill, sparkline, square, text, vertical),
+			// shape (arrow, circle, cross, diamond, down, flag, horizontal,
+			// number, plus, sparkfill, sparkline, square, text, vertical),
 			// color (string), series (number), item (number), size (number),
-			// priority (number), text (string)
+			// priority (number), text (string), positioned (boolean)
 		minValue: 0, // The minimum value of the data, $.gchart.calculate to calculate from data
 		maxValue: 100, // The maximum value of the data, $.gchart.calculate to calculate from data
 		gridSize: [], // The x and y spacings between grid lines
 		gridLine: [], // The line and gap lengths for the grid lines
+		gridOffsets: [], // The x and y offsets for the grid lines
 		extension: {}, // Any custom extensions to the Google chart parameters
 		// Bar charts -------------
-		barWidth: null, // The width of each bar (pixels)
+		barWidth: null, // The width of each bar (pixels) or 'a' for automatic or 'r' for relative
 		barSpacing: null, // The space (pixels) between bars in a group
 		barGroupSpacing: null, // The space (pixels) between groups of bars
 		barZeroPoint: null, // The position (0.0 to 1.0) of the zero-line
+		// Pie charts -------------
+		pieOrientation: 0, // The angle (degrees) of orientation from the positive x-axis
 		// Maps -------------------
 		mapArea: 'world', // The general area to show: world,
 			// africa, asia, europe, middle_east, south_america, usa
@@ -75,17 +79,20 @@ var COLOURS = {aqua: '008080', black: '000000', blue: '0000ff', fuchsia: 'ff00ff
 /* Mapping from plugin chart types to Google chart types. */
 var CHART_TYPES = {line: 'lc', lineXY: 'lxy', sparkline: 'ls',
 	barHoriz: 'bhs', barVert: 'bvs', barHorizGrouped: 'bhg', barVertGrouped: 'bvg',
-	pie: 'p', pie3D: 'p3', venn: 'v', scatter: 's',
+	pie: 'p', pie3D: 'p3', pieConcentric: 'pc', venn: 'v', scatter: 's',
 	radar: 'r', radarCurved: 'rs', map: 't', meter: 'gom', qrCode: 'qr'};
 /* Mapping from plugin shape types to Google chart shapes. */
-var SHAPES = {arrow: 'a', circle: 'o', cross: 'x', diamond: 'd', down: 'v', horizontal: 'h',
-	plus: 'c', sparkfill: 'B', sparkline: 'D', square: 's', text: 't', vertical: 'V'};
+var SHAPES = {arrow: 'a', circle: 'o', cross: 'x', diamond: 'd', down: 'v',
+	flag: 'f', financial: 'F', horizontal: 'h', number: 'N', plus: 'c',
+	sparkfill: 'B', sparkline: 'D', square: 's', text: 't', vertical: 'V'};
 /* Mapping from plugin priority names to chart priority codes. */
-var PRIORITIES = {behind: -1, normal: 0, above: 1};
+var PRIORITIES = {behind: -1, below: -1, normal: 0, above: 1, inFront: 1};
 /* Mapping from plugin gradient names to angles. */
 var GRADIENTS = {diagonalDown: -45, diagonalUp: 45, horizontal: 0, vertical: 90};
 /* Mapping from plugin alignment names to chart alignment codes. */
 var ALIGNMENTS = {left: -1, center: 0, right: 1};
+/* Mapping from plugin drawing control names to chart drawing control codes. */
+var DRAWING = {line: 'l', ticks: 't', both: 'lt'};
 
 /* Characters to use for encoding schemes. */
 var SIMPLE_ENCODING = 'ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789';
@@ -97,6 +104,16 @@ $.extend(GChart.prototype, {
 	
 	/* Marker value to indicate min/max calculation from data. */
 	calculate: -0.123,
+	
+	/* Possible values for bar width. */
+	barWidthAuto: 'a', // Automatic resize to fill
+	barWidthRelative: 'r', // Spacings are relative to bars (0.0 - 1.0)
+	
+	/* Possible values for number format. */
+	formatFloat: 'f',
+	formatPercent: 'p',
+	formatScientific: 'e',
+	formatCurrency: 'c',
 
 	/* Override the default settings for all Google chart instances.
 	   @param  options  (object) the new settings to use as defaults */
@@ -107,7 +124,7 @@ $.extend(GChart.prototype, {
 	/* Create a new data series.
 	   @param  label       (string, optional) the label for this series
 	   @param  data        (number[]) the data values for this series
-	   @param  colour      (string) the colour for this series
+	   @param  colour      (string or string[]) the colour(s) for this series
 	   @param  fillColour  (string, optional) the fill colour for this series
 	   @param  minValue    (number) the minimum value for this series
 	   @param  maxValue    (number) the maximum value for this series
@@ -125,7 +142,7 @@ $.extend(GChart.prototype, {
 			data = label;
 			label = '';
 		}
-		if (typeof colour != 'string') { // Optional colour/fillColour
+		if (typeof colour != 'string' && !isArray(colour)) { // Optional colour/fillColour
 			segments = maxValue;
 			thickness = minValue;
 			maxValue = fillColour;
@@ -234,28 +251,33 @@ $.extend(GChart.prototype, {
 		xml = $(xml);
 		var seriesData = [];
 		var xyData = false;
-		xml.find('series').each(function() {
-			var series = $(this);
-			var data = [];
-			series.find('point').each(function() {
-				var point = $(this);
-				var x = point.attr('x');
-				if (x != null) {
-					xyData = true;
-					x = $.gchart._numeric(x, -1);
+		try {
+			xml.find('series').each(function() {
+				var series = $(this);
+				var data = [];
+				series.find('point').each(function() {
+					var point = $(this);
+					var x = point.attr('x');
+					if (x != null) {
+						xyData = true;
+						x = $.gchart._numeric(x, -1);
+					}
+					y = $.gchart._numeric(point.attr('y'), -1);
+					data.push(x ? [x, y] : y);
+				});
+				var segments = series.attr('lineSegments');
+				if (segments) {
+					segments = segments.split(',');
 				}
-				y = $.gchart._numeric(point.attr('y'), -1);
-				data.push(x ? [x, y] : y);
+				seriesData.push({label: series.attr('label'), data: data,
+					color: series.attr('color'), fillColor: series.attr('fillColor'),
+					minValue: series.attr('minValue'), maxValue: series.attr('maxValue'),
+					lineThickness: series.attr('lineThickness'), lineSegments: segments});
 			});
-			var segments = series.attr('lineSegments');
-			if (segments) {
-				segments = segments.split(',');
-			}
-			seriesData.push({label: series.attr('label'), data: data,
-				color: series.attr('color'), fillColor: series.attr('fillColor'),
-				minValue: series.attr('minValue'), maxValue: series.attr('maxValue'),
-				lineThickness: series.attr('lineThickness'), lineSegments: segments});
-		});
+		}
+		catch (e) {
+			// Ignore
+		}
 		return (xyData ? this.seriesForXYLines(seriesData) : seriesData);
 	},
 
@@ -289,11 +311,11 @@ $.extend(GChart.prototype, {
 			var yData = [];
 			for (var j = 0; j < series[i].data.length; j++) {
 				if (xNull) {
-					yData[yData.length] = series[i].data[j];
+					yData.push(series[i].data[j]);
 				}
 				else {
-					xData[xData.length] = series[i].data[j][0];
-					yData[yData.length] = series[i].data[j][1];
+					xData.push(series[i].data[j][0]);
+					yData.push(series[i].data[j][1]);
 				}
 			}
 			xySeries.push($.gchart.series(series[i].label, xData, series[i].color,
@@ -343,17 +365,36 @@ $.extend(GChart.prototype, {
 	   @param  text      (string) the text to show on the arrow (optional)
 	   @param  value     (number) the position of the arrow
 	   @param  maxValue  (number) the maximum value for the meter (optional, default 100)
+	   @param  colours   (string[]) the colours to use for the band (optional)
 	   @param  options   (object) additional settings (optional)
 	   @return  (object) the configured options object */
-	meter: function(text, value, maxValue, options) {
+	meter: function(text, value, maxValue, colours, options) {
 		if (typeof text != 'string') {
-			options = maxValue;
+			options = colours;
+			colours = maxValue;
 			maxValue = value;
 			value = text;
 			text = '';
 		}
+		if (typeof maxValue != 'number') {
+			options = colours;
+			colours = maxValue;
+			maxValue = null;
+		}
+		if (!isArray(colours)) {
+			options = colours;
+			colours = null;
+		}
+		if (colours) {
+			var cs = '';
+			$.each(colours, function(i, v) {
+				cs += ',' + $.gchart.color(v);
+			});
+			colours = cs.substr(1);
+		}
 		return $.extend({}, options || {}, {type: 'meter', maxValue: maxValue || 100,
-			dataLabels: [text || ''], series: [$.gchart.series([value])]});
+			dataLabels: [text || ''], series: [$.gchart.series([value])]},
+			(colours ? {extension: {chco: colours}} : {}));
 	},
 
 	/* Prepare options for a map chart.
@@ -456,7 +497,7 @@ $.extend(GChart.prototype, {
 	},
 
 	/* Create a simple linear gradient definition for a background.
-	   @param  angle    (string or number) the angle of the gradient from x-axis
+	   @param  angle    (string or number) the angle of the gradient from positive x-axis
 	   @param  colour1  (string[]) an array of colours or
 	                    (string) the starting colour
 	   @param  colour2  (string, optional) the ending colour
@@ -466,8 +507,7 @@ $.extend(GChart.prototype, {
 		if (isArray(colour1)) {
 			var step = 1 / (colour1.length - 1);
 			for (var i = 0; i < colour1.length; i++) {
-				colourPoints[colourPoints.length] =
-					[colour1[i], Math.round(i * step * 100) / 100];
+				colourPoints.push([colour1[i], Math.round(i * step * 100) / 100]);
 			}
 		}
 		else {
@@ -477,14 +517,14 @@ $.extend(GChart.prototype, {
 	},
 
 	/* Create a colour striping definition for a background.
-	   @param  angle    (string or number) the angle of the stripes from x-axis
+	   @param  angle    (string or number) the angle of the stripes from positive x-axis
 	   @param  colours  (string[]) the colours to stripe
 	   @return  (object) the stripe definition */
 	stripe: function(angle, colours) {
 		var colourPoints = [];
 		var width = Math.round(100 / colours.length) / 100;
 		for (var i = 0; i < colours.length; i++) {
-			colourPoints[colourPoints.length] = [colours[i], width];
+			colourPoints.push([colours[i], width]);
 		}
 		return {angle: angle, striped: true, colorPoints: colourPoints};
 	},
@@ -506,65 +546,99 @@ $.extend(GChart.prototype, {
 	},
 
 	/* Create a marker definition.
-	   @param  shape     (string) the marker shape
-	   @param  colour    (string) the marker's colour
-	   @param  series    (number) the series to which the marker applies
-	   @param  item      (number or string, optional) the item in the series to which it applies
-	   @param  size      (number, optional) the size (pixels) of the marker
-	   @param  priority  (string or number, optional) the rendering priority
-	   @param  text      (string, optional) the display text for a text type marker
+	   @param  shape       (string) the marker shape
+	   @param  colour      (string) the marker's colour
+	   @param  series      (number) the series to which the marker applies
+	   @param  item        (number or string or number[2 or 3], optional)
+	                       the item in the series to which it applies or 'all' or
+	                       'everyn' or 'everyn[s:e]' or [start, end, every]
+	   @param  size        (number, optional) the size (pixels) of the marker
+	   @param  priority    (string or number, optional) the rendering priority
+	   @param  text        (string, optional) the display text for a text type marker
+	   @param  positioned  (boolean, optional) true to absolutely position the marker
 	   @return  (object) the marker definition */
-	marker: function(shape, colour, series, item, size, priority, text) {
+	marker: function(shape, colour, series, item, size, priority, text, positioned) {
 		if (typeof size == 'string') { // Optional size/priority
+			positioned = priority;
 			text = size;
+			priority = null;
 			size = null;
 		}
-		return {shape: shape, color: colour, series: series, item: item || -1,
-			size: size || 10, priority: (priority != null ? priority : 0), text: text};
+		return {shape: shape, color: colour, series: series,
+			item: (item || item == 0 ? item : -1), size: size || 10,
+			priority: (priority != null ? priority : 0), text: text,
+			positioned: positioned};
+	},
+
+	/* Create a number format for a marker.
+	   @param  type        (string) 'f' for floating point, 'p' for percentage,
+	                       'e' for scientific notation, 'c<CUR>' for currency (as specified by CUR)
+	   @param  prefix      (string, optional) text appearing before the number
+	   @param  suffix      (string, optional - can only be present if prefix is present)
+	                       text appearing after the number
+	   @param  precision   (number, optional) the number of decimal places
+	   @param  showX       (boolean, optional) true to show the x-value, false for the y-value
+	   @param  zeroes      (boolean, optional - can only be present if showX is present)
+	                       true to display trailing zeroes
+	   @param  separators  (boolean, optional - can only be present if showX and zeroes are present)
+	                       true to display group separators
+	   @return  (string) the format definition */
+	numberFormat: function(type, prefix, suffix, precision, showX, zeroes, separators) {
+		if (typeof prefix == 'number') {
+			separators = showX;
+			zeroes = precision;
+			showX = suffix;
+			precision = prefix;
+			suffix = '';
+			prefix = '';
+		}
+		if (typeof prefix == 'boolean') {
+			separators = precision;
+			zeroes = suffix;
+			showX = prefix;
+			precision = 0;
+			suffix = '';
+			prefix = '';
+		}
+		if (typeof suffix == 'number') {
+			separators = zeroes;
+			zeroes = showX;
+			showX = precision;
+			precision = suffix;
+			suffix = '';
+		}
+		if (typeof suffix == 'boolean') {
+			separators = showX;
+			zeroes = precision;
+			showX = suffix;
+			precision = 0;
+			suffix = '';
+		}
+		if (typeof precision == 'boolean') {
+			separators = zeroes;
+			zeroes = showX;
+			showX = precision;
+			precision = 0;
+		}
+		return (prefix || '') + '*' + type + (precision || '') + (zeroes ? 'z' : '') +
+			(separators ? 's' : '') + (showX ? 'x' : '') + '*' + (suffix || '');
 	},
 
 	/* Create an axis definition.
-	   @param  axis        (string) the axis position: top, bottom, left, right
-	   @param  labels      (string[]) the labels for this axis
-	   @param  positions   (number[]) the positions of the labels
-	   @param  rangeStart  (number) start of range
-	   @param  rangeEnd    (number) end of range
-	   @param  colour      (string) the axis colour
-	   @param  alignment   (string) the labels' alignment
-	   @param  size        (number) the labels' size
+	   @param  axis           (string) the axis position: top, bottom, left, right
+	   @param  labels         (string[]) the labels for this axis
+	   @param  positions      (number[], optional) the positions of the labels
+	   @param  rangeStart     (number, optional with next two) start of range
+	   @param  rangeEnd       (number, optional with above) end of range
+	   @param  rangeInterval  (number, optional with above) interval between values in the range
+	   @param  colour         (string, optional) the axis colour
+	   @param  alignment      (string, optional) the labels' alignment
+	   @param  size           (number, optional) the labels' size
 	   @return  (object) the axis definition */
-	axis: function(axis, labels, positions, rangeStart, rangeEnd, colour, alignment, size) {
-		if (typeof labels == 'number') { // Range instead of labels/positions
-			size = colour;
-			alignment = rangeEnd;
-			colour = rangeStart;
-			rangeEnd = positions;
-			rangeStart = labels;
-			positions = null;
-			labels = null;
-		}
-		else if (!isArray(positions)) { // Optional positions
-			size = alignment;
-			alignment = colour;
-			colour = rangeEnd;
-			rangeEnd = rangeStart;
-			rangeStart = positions;
-			positions = null;
-		}
-		if (typeof rangeStart == 'string') { // Optional rangeStart/rangeEnd
-			size = colour;
-			alignment = rangeEnd;
-			colour = rangeStart;
-			rangeEnd = null;
-			rangeStart = null;
-		}
-		if (typeof alignment == 'number') { // Optional alignment
-			size = alignment;
-			alignment = null;
-		}
-		return {axis: axis, labels: labels, positions: positions,
-			range: (rangeStart != null ? [rangeStart, rangeEnd] : null),
-			color: colour, alignment: alignment, size: size};
+	axis: function(axis, labels, positions, rangeStart,
+			rangeEnd, rangeInterval, colour, alignment, size) {
+		return new GChartAxis(axis, labels, positions, rangeStart,
+			rangeEnd, rangeInterval, colour, alignment, size);
 	},
 
 	/* Attach the Google chart functionality to a div.
@@ -577,8 +651,8 @@ $.extend(GChart.prototype, {
 		}
 		target.addClass(this.markerClassName);
 		options = options || {};
-		var width = options.width || parseInt(target.css('width'));
-		var height = options.height || parseInt(target.css('height'));
+		var width = options.width || parseInt(target.css('width'), 10);
+		var height = options.height || parseInt(target.css('height'), 10);
 		var allOptions = $.extend({}, this._defaults, options,
 			{width: width, height: height});
 		$.data(target[0], PROP_NAME, allOptions);
@@ -615,16 +689,21 @@ $.extend(GChart.prototype, {
 			this['_textEncoding'];
 		var labels = '';
 		for (var i = 0; i < options.dataLabels.length; i++) {
-			labels += '|' + escape(options.dataLabels[i] || '');
+			labels += '|' + encodeURIComponent(options.dataLabels[i] || '');
 		}
 		labels = (labels.length == options.dataLabels.length ? '' : labels);
 		var legends = '';
 		var colours = '';
 		var lines = '';
 		for (var i = 0; i < options.series.length; i++) {
-			legends += '|' + escape(options.series[i].label || '');
+			legends += '|' + encodeURIComponent(options.series[i].label || '');
 			if (type != 'lxy' || i % 2 == 0) {
-				colours += ',' + this.color(options.series[i].color || '');
+				var sep = ',';
+				$.each((isArray(options.series[i].color) ? options.series[i].color :
+						[options.series[i].color]), function(i, v) {
+					colours += sep + $.gchart.color(v || '');
+					sep = '|';
+				});
 			}
 			if (type.substr(0, 1) == 'l' && options.series[i].lineThickness &&
 					isArray(options.series[i].lineSegments)) {
@@ -644,6 +723,17 @@ $.extend(GChart.prototype, {
 			return (type != 't' ? '&amp;chs=' + options.width + 'x' + options.height :
 				'&amp;chs=' + Math.min(440, options.width) + 'x' + Math.min(220, options.height));
 		};
+		var addMargins = function() {
+			var margins = options.margins;
+			margins = (margins == null ? null :
+				(typeof margins == 'number' ? [margins, margins, margins, margins] :
+				(!isArray(margins) ? null :
+				(margins.length == 4 ? margins :
+				(margins.length == 2 ? [margins[0], margins[0], margins[1], margins[1]] : null)))));
+			return (!margins ? '' : '&amp;chma=' + margins.join(',') +
+				(!options.legendSize || options.legendSize.length != 2 ? '' :
+				'|' + options.legendSize.join(',')));
+		};
 		var qrOptions = function() {
 			return include('&amp;choe=', options.encoding) +
 				(options.qrECLevel || options.qrMargin ?
@@ -661,20 +751,9 @@ $.extend(GChart.prototype, {
 				$.gchart.color(options.mapColors[1] || 'green');
 		};
 		var pieOptions = function() {
-			var series = options.series;
-			var pieLabels = '';
-			if (options.series.length > 1) {
-				var pieSeries = $.gchart.series([]);
-				for (var i = 0; i < options.series.length; i++) {
-					pieSeries.data[pieSeries.data.length] = options.series[i].data[0];
-					pieLabels += '|' + escape(options.series[i].label || '');
-				}
-				options.series = [pieSeries];
-			}
-			var data = encoding.apply($.gchart, [options]);
-			options.series = series;
-			return '&amp;chd=' + data + (labels ? '&amp;chl=' + labels.substr(1) :
-				(pieLabels ? '&amp;chl=' + pieLabels.substr(1) : ''));
+			return (options.pieOrientation ?
+				'&amp;chp=' + (options.pieOrientation / 180 * Math.PI) : '') +
+				standardOptions();
 		};
 		var standardOptions = function() {
 			return '&amp;chd=' + encoding.apply($.gchart, [options]) +
@@ -683,8 +762,10 @@ $.extend(GChart.prototype, {
 		var addBarSizings = function() {
 			return (type.substr(0, 1) != 'b' ? '' : (options.barWidth == null ? '' :
 				'&amp;chbh=' + options.barWidth +
-				(options.barSpacing == null ? '' : ',' + options.barSpacing +
-				(options.barGroupSpacing == null ? '' : ',' + options.barGroupSpacing))) +
+				(options.barSpacing == null ? '' : ',' + (options.barWidth == $.gchart.barWidthRelative ?
+				Math.min(Math.max(options.barSpacing, 0.0), 1.0) : options.barSpacing) +
+				(options.barGroupSpacing == null ? '' : ',' + (options.barWidth == $.gchart.barWidthRelative ?
+				Math.min(Math.max(options.barGroupSpacing, 0.0), 1.0) : options.barGroupSpacing)))) +
 				(options.barZeroPoint == null ? '' : '&amp;chp=' + options.barZeroPoint));
 		};
 		var addLineStyles = function() {
@@ -694,7 +775,7 @@ $.extend(GChart.prototype, {
 			return (colours.length > options.series.length ? '&amp;chco=' + colours.substr(1) : '');
 		};
 		var addTitle = function() {
-			return include('&amp;chtt=', escape(options.title)) +
+			return include('&amp;chtt=', encodeURIComponent(options.title)) +
 			(options.titleColor || options.titleSize ?
 			'&amp;chts=' + $.gchart.color(options.titleColor) + ',' +
 			(options.titleSize || 20) : '');
@@ -705,41 +786,52 @@ $.extend(GChart.prototype, {
 			var axesPositions = '';
 			var axesRanges = '';
 			var axesStyles = '';
+			var axesTicks = '';
 			for (var i = 0; i < options.axes.length; i++) {
-				var axis = (typeof options.axes[i] == 'string' ?
-					options.axes[i].charAt(0) : options.axes[i].axis.charAt(0));
+				var axisDef = (typeof options.axes[i] == 'string' ?
+					new GChartAxis(options.axes[i]) : options.axes[i]);
+				var axis = axisDef.axis().charAt(0);
 				axes += ',' + (axis == 'b' ? 'x' : (axis == 'l' ? 'y' : axis));
-				if (options.axes[i].labels) {
+				if (axisDef.labels()) {
 					var labels = '';
-					for (var j = 0; j < options.axes[i].labels.length; j++) {
-						labels += '|' + escape(options.axes[i].labels[j] || '');
+					for (var j = 0; j < axisDef.labels().length; j++) {
+						labels += '|' + encodeURIComponent(axisDef.labels()[j] || '');
 					}
 					axesLabels += (labels ? '|' + i + ':' + labels : '');
 				}
-				if (options.axes[i].positions) {
+				if (axisDef.positions()) {
 					var positions = '';
-					for (var j = 0; j < options.axes[i].positions.length; j++) {
-						positions += ',' + options.axes[i].positions[j];
+					for (var j = 0; j < axisDef.positions().length; j++) {
+						positions += ',' + axisDef.positions()[j];
 					}
 					axesPositions += (positions ? '|' + i + positions : '');
 				}
-				if (options.axes[i].range) {
-					axesRanges += '|' + i + ',' + options.axes[i].range[0] +
-						',' + options.axes[i].range[1];
+				if (axisDef.range()) {
+					var range = axisDef.range();
+					axesRanges += '|' + i + ',' + range[0] + ',' + range[1] +
+						(range[2] ? ',' + range[2] : '');
 				}
-				if (options.axes[i].color) {
-					var alignment = options.axes[i].alignment || 0;
+				if (axisDef.style() || axisDef.drawing() || axisDef.ticks()) {
+					var style = axisDef.style() || {};
+					var ticks = axisDef.ticks() || {};
 					axesStyles += '|' + i + ',' +
-						$.gchart.color(options.axes[i].color || 'gray') + ',' +
-						(options.axes[i].size || 10) + ',' + 
-						(ALIGNMENTS[alignment] != null ? ALIGNMENTS[alignment] : alignment);
+						$.gchart.color(style.color || 'gray') + ',' +
+						(style.size || 10) + ',' + 
+						(ALIGNMENTS[style.alignment] || style.alignment || 0) +
+						(!axisDef.drawing() && !ticks.color ? '' : ',' +
+						(DRAWING[axisDef.drawing()] || axisDef.drawing() || 'lt') +
+						(ticks.color ? ',' + $.gchart.color(ticks.color) : ''));
+				}
+				if (axisDef.ticks() && axisDef.ticks().length) {
+					axesTicks += '|' + i + ',' + axisDef.ticks().length;
 				}
 			}
 			return (!axes ? '' : '&amp;chxt=' + axes.substr(1) +
 				(!axesLabels ? '' : '&amp;chxl=' + axesLabels.substr(1)) +
 				(!axesPositions ? '' : '&amp;chxp=' + axesPositions.substr(1)) +
 				(!axesRanges ? '' : '&amp;chxr=' + axesRanges.substr(1)) +
-				(!axesStyles ? '' : '&amp;chxs=' + axesStyles.substr(1)));
+				(!axesStyles ? '' : '&amp;chxs=' + axesStyles.substr(1)) +
+				(!axesTicks ? '' : '&amp;chxtc=' + axesTicks.substr(1)));
 		};
 		var addBackground = function(area, background) {
 			if (background == null) {
@@ -766,19 +858,43 @@ $.extend(GChart.prototype, {
 			return (options.gridSize.length == 0 ? '' :
 				'&amp;chg=' + options.gridSize[0] + ',' + options.gridSize[1] +
 				(options.gridLine.length == 0 ? '' :
-				',' + options.gridLine[0] + ',' + options.gridLine[1]));
+				',' + options.gridLine[0] + ',' + options.gridLine[1] +
+				(options.gridOffsets.length == 0 ? '' :
+				',' + options.gridOffsets[0] + ',' + options.gridOffsets[1])));
 		};
 		var addMarkers = function() {
 			var markers = '';
+			var decodeItem = function(item, positioned) {
+				if (item == 'all') {
+					return -1;
+				}
+				if (typeof item == 'string') {
+					var matches = /^every(\d+)(?:\[(\d+):(\d+)\])?$/.exec(item);
+					if (matches) {
+						var every = parseInt(matches[1], 10);
+						return (matches[2] && matches[3] ?
+							(positioned ? Math.max(0.0, Math.min(1.0, matches[2])) : matches[2]) + ':' +
+							(positioned ? Math.max(0.0, Math.min(1.0, matches[3])) : matches[3]) + ':' +
+							every : -every);
+					}
+				}
+				if (isArray(item)) {
+					$.map(item, function(v, i) {
+						return (positioned ? Math.max(0.0, Math.min(1.0, v)) : v);
+					});
+					return item.join(':');
+				}
+				return item;
+			};
 			for (var i = 0; i < options.markers.length; i++) {
-				var shape = SHAPES[options.markers[i].shape] || options.markers[i].shape;
-				markers += '|' + shape + (shape == 't' ? options.markers[i].text : '') + ',' +
-					$.gchart.color(options.markers[i].color) + ',' +
-					options.markers[i].series + ',' +
-					(options.markers[i].item == 'all' ? -1 : options.markers[i].item) + ',' +
-					options.markers[i].size + ',' +
-					(PRIORITIES[options.markers[i].priority] != null ?
-					PRIORITIES[options.markers[i].priority] : options.markers[i].priority);
+				var marker = options.markers[i];
+				var shape = SHAPES[marker.shape] || marker.shape;
+				markers += '|' + (marker.positioned ? '@' : '') + shape +
+					('fNt'.indexOf(shape) > -1 ? marker.text || '' : '') + ',' +
+					$.gchart.color(marker.color) + ',' +
+					marker.series + ',' + decodeItem(marker.item, marker.positioned) +
+					',' + marker.size + ',' + (PRIORITIES[marker.priority] != null ?
+					PRIORITIES[marker.priority] : marker.priority);
 			}
 			for (var i = 0; i < options.ranges.length; i++) {
 				markers += '|' + (options.ranges[i].vertical ? 'R' : 'r') + ',' +
@@ -795,16 +911,18 @@ $.extend(GChart.prototype, {
 		};
 		var addLegends = function() {
 			return (!options.legend || legends.length <= options.series.length ? '' :
-				'&amp;chdl=' + legends.substr(1) + include('&amp;chdlp=', options.legend.charAt(0)));
+				'&amp;chdl=' + legends.substr(1) + include('&amp;chdlp=',
+				options.legend.charAt(0) + (options.legend.indexOf('V') > -1 ? 'v' : '')));
 		};
 		var addExtensions = function() {
 			var params = '';
 			for (var name in options.extension) {
-				params += '&amp;' + name + '=' + escape(options.extension[name]);
+				params += '&amp;' + name + '=' + encodeURIComponent(options.extension[name]);
 			}
 			return params;
 		};
-		$(target).html('<img src="http://chart.apis.google.com/chart?cht=' + type + addSize() +
+		$(target).html('<img src="http://chart.apis.google.com/chart?cht=' + type +
+			addSize() + addMargins() +
 			(type == 'qr' ? qrOptions() : (type == 't' ? mapOptions() :
 			(type.charAt(0) == 'p' ? pieOptions() : standardOptions()))) +
 			addBarSizings() + addLineStyles() + addColours() + addTitle() + addAxes() +
@@ -824,7 +942,7 @@ $.extend(GChart.prototype, {
 		for (var i = 0; i < options.series.length; i++) {
 			data += '|' + this._textEncode(options.series[i], minValue, maxValue);
 		}
-		return 't:' + data.substr(1);
+		return 't' + (options.visibleSeries || '') + ':' + data.substr(1);
 	},
 
 	/* Encode values in text format: numeric 0.0 to 100.0, comma separated, -1 for null
@@ -861,7 +979,8 @@ $.extend(GChart.prototype, {
 				',' + (options.series[i].maxValue != null ?
 				options.series[i].maxValue : maxValue);
 		}
-		return 't:' + data.substr(1) + '&amp;chds=' + minMax.substr(1);
+		return 't' + (options.visibleSeries || '') + ':' + data.substr(1) +
+			'&amp;chds=' + minMax.substr(1);
 	},
 
 	/* Encode values in text format: numeric min to max, comma separated, min - 1 for null
@@ -890,7 +1009,7 @@ $.extend(GChart.prototype, {
 		for (var i = 0; i < options.series.length; i++) {
 			data += ',' + this._simpleEncode(options.series[i], minValue, maxValue);
 		}
-		return 's:' + data.substr(1);
+		return 's' + (options.visibleSeries || '') + ':' + data.substr(1);
 	},
 
 	/* Encode values in simple format: single character,
@@ -923,7 +1042,7 @@ $.extend(GChart.prototype, {
 		for (var i = 0; i < options.series.length; i++) {
 			data += ',' + this._extendedEncode(options.series[i], minValue, maxValue);
 		}
-		return 'e:' + data.substr(1);
+		return 'e' + (options.visibleSeries || '') + ':' + data.substr(1);
 	},
 
 	/* Encode values in extended format: double character,
@@ -974,6 +1093,166 @@ $.extend(GChart.prototype, {
 			}
 		}
 		return maxValue;
+	}
+});
+
+/* The definition of a chart axis.
+   @param  axis           (string) the axis position: top, bottom, left, right
+   @param  labels         (string[]) the labels for this axis
+   @param  positions      (number[], optional) the positions of the labels
+   @param  rangeStart     (number, optional with next two) start of range
+   @param  rangeEnd       (number, optional with above) end of range
+   @param  rangeInterval  (number, optional with above) interval between values in the range
+   @param  colour         (string, optional) the axis colour
+   @param  alignment      (string, optional) the labels' alignment
+   @param  size           (number, optional) the labels' size */
+function GChartAxis(axis, labels, positions, rangeStart, rangeEnd, rangeInterval, colour, alignment, size) {
+	if (typeof labels == 'number') { // Range instead of labels/positions
+		size = colour;
+		alignment = rangeInterval;
+		colour = rangeEnd;
+		rangeInterval = rangeStart;
+		rangeEnd = positions;
+		rangeStart = labels;
+		positions = null;
+		labels = null;
+	}
+	else if (!isArray(positions)) { // Optional positions
+		size = alignment;
+		alignment = colour;
+		colour = rangeInterval;
+		rangeInterval = rangeEnd;
+		rangeEnd = rangeStart;
+		rangeStart = positions;
+		positions = null;
+	}
+	if (typeof rangeStart == 'string') { // Optional rangeStart/rangeEnd/rangeInterval
+		size = rangeInterval;
+		alignment = rangeEnd;
+		colour = rangeStart;
+		rangeInterval = null;
+		rangeEnd = null;
+		rangeStart = null;
+	}
+	if (typeof rangeInterval == 'string') { // Optional rangeInterval
+		size = alignment;
+		alignment = colour;
+		colour = rangeInterval;
+		rangeInterval = null;
+	}
+	if (typeof alignment == 'number') { // Optional alignment
+		size = alignment;
+		alignment = null;
+	}
+	this._axis = axis;
+	this._labels = labels;
+	this._positions = positions;
+	this._range = (rangeStart != null ? [rangeStart, rangeEnd, rangeInterval] : null);
+	this._color = colour;
+	this._alignment = alignment;
+	this._size = size;
+	this._drawing = null;
+	this._tickColor = null;
+	this._tickLength = null;
+}
+
+$.extend(GChartAxis.prototype, {
+
+	/* Get/set the axis position.
+	   @param  axis  (string) the axis position: top, bottom, left, right
+	   @return  (GChartAxis) the axis object or
+	            (string) the axis position (if no parameters specified) */
+	axis: function(axis) {
+		if (arguments.length == 0) {
+			return this._axis;
+		}
+		this._axis = axis;
+		return this;
+	},
+	
+	/* Get/set the axis labels.
+	   @param  labels  (string[]) the labels for this axis
+	   @return  (GChartAxis) the axis object or
+	            (string[]) the axis labels (if no parameters specified) */
+	labels: function(labels) {
+		if (arguments.length == 0) {
+			return this._labels;
+		}
+		this._labels = labels;
+		return this;
+	},
+
+	/* Get/set the axis label positions.
+	   @param  positions  (number[]) the positions of the labels
+	   @return  (GChartAxis) the axis object or
+	            (number[]) the axis label positions (if no parameters specified) */
+	positions: function(positions) {
+		if (arguments.length == 0) {
+			return this._positions;
+		}
+		this._positions = positions;
+		return this;
+	},
+
+	/* Get/set the axis range.
+	   @param  rangeStart     (number) start of range
+	   @param  rangeEnd       (number) end of range
+	   @param  rangeInterval  (number, optional) interval between values in the range
+	   @return  (GChartAxis) the axis object or
+	            (number[3]) the axis range start, end, and interval (if no parameters specified) */
+	range: function(start, end, interval) {
+		if (arguments.length == 0) {
+			return this._range;
+		}
+		this._range = [start, end, interval];
+		return this;
+	},
+
+	/* Get/set the axis style.
+	   @param  colour     (string) the axis colour
+	   @param  alignment  (string, optional) the labels' alignment
+	   @param  size       (number, optional) the labels' size
+	   @return  (GChartAxis) the axis object or
+	            (object) the axis style with attributes color, alignment, and size
+				(if no parameters specified) */
+	style: function(colour, alignment, size) {
+		if (arguments.length == 0) {
+			return (!this._color && !this._alignment && !this._size ? null :
+				{color: this._color, alignment: this._alignment, size: this._size});
+		}
+		this._color = colour;
+		this._alignment = alignment;
+		this._size = size;
+		return this;
+	},
+
+	/* Get/set the axis drawing control.
+	   @param  drawing  (string) the drawing control: line, ticks, both
+	   @return  (GChartAxis) the axis object or
+	            (string) the axis drawing control (if no parameters specified) */
+	drawing: function(drawing) {
+		if (arguments.length == 0) {
+			return this._drawing;
+		}
+		this._drawing = drawing;
+		return this;
+	},
+
+	/* Get/set the axis tick style.
+	   @param  colour  (string) the colour of the tick marks
+	   @param  length  (number, optional) the length of the tick marks,
+	                   negative values draw inside the chart
+	   @return  (GChartAxis) the axis object or
+	            (object) the axis tick style with attributes color and length
+				(if no parameters specified) */
+	ticks: function(colour, length) {
+		if (arguments.length == 0) {
+			return (!this._tickColor && !this._tickLength ? null :
+				{color: this._tickColor, length: this._tickLength});
+		}
+		this._tickColor = colour;
+		this._tickLength = length;
+		return this;
 	}
 });
 
