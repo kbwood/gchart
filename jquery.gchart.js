@@ -1,5 +1,5 @@
 /* http://keith-wood.name/gChart.html
-   Google Chart interface for jQuery v1.3.1.
+   Google Chart interface for jQuery v1.3.2.
    See API details at http://code.google.com/apis/chart/.
    Written by Keith Wood (kbwood{at}iinet.com.au) September 2008.
    Dual licensed under the GPL (http://dev.jquery.com/browser/trunk/jquery/GPL-LICENSE.txt) and 
@@ -89,10 +89,10 @@ var COLOURS = {aqua: '008080', black: '000000', blue: '0000ff', fuchsia: 'ff00ff
 	teal: '008080', transparent: '00000000', white: 'ffffff', yellow: 'ffff00'};
 /* Mapping from plugin chart types to Google chart types. */
 var CHART_TYPES = {line: 'lc', lineXY: 'lxy', sparkline: 'ls',
-	barHoriz: 'bhs', barVert: 'bvs', barHorizGrouped: 'bhg', barVertGrouped: 'bvg',
+	barHoriz: 'bhs', barVert: 'bvs', barHorizGrouped: 'bhg', barVertGrouped: 'bvg', graphviz: 'gv',
 	pie: 'p', pie3D: 'p3', pieConcentric: 'pc', venn: 'v', scatter: 's',
 	radar: 'r', radarCurved: 'rs', map: 't', meter: 'gom', qrCode: 'qr', formula: 'tx',
-	lc: 'lc', lxy: 'lxy', ls: 'ls', bhs: 'bhs', bvs: 'bvs', bhg: 'bhg', bvg: 'bvg',
+	lc: 'lc', lxy: 'lxy', ls: 'ls', bhs: 'bhs', bvs: 'bvs', bhg: 'bhg', bvg: 'bvg', gv: 'gv',
 	p: 'p', p3: 'p3', pc: 'pc', v: 'v', s: 's',
 	r: 'r', rs: 'rs', t: 't', gom: 'gom', qr: 'qr', tx: 'tx'};
 /* Mapping from plugin shape types to Google chart shapes. */
@@ -350,7 +350,7 @@ $.extend(GChart.prototype, {
 			xySeries.push($.gchart.series(series[i].label, xData, series[i].color,
 				series[i].fillColor, series[i].minValue, series[i].maxValue,
 				series[i].lineThickness, series[i].lineSegments));
-			xySeries.push($.gchart.series(series[i].label, yData, '',
+			xySeries.push($.gchart.series('', yData, '',
 				series[i].fillColor, series[i].minValue, series[i].maxValue,
 				series[i].lineThickness, series[i].lineSegments));
 		}
@@ -556,6 +556,27 @@ $.extend(GChart.prototype, {
 			options.dataLabels = [options.text];
 			options.text = null;
 		}
+		return options;
+	},
+
+	/* Prepare options for a GraphViz chart.
+	   @param  engine    (string, optional) the graphing engine to use:
+	                     dot (default), neato, twopi, circo, fdp
+	   @param  options   (object, optional) other options for the chart
+	   @param  graph     (string) the DOT representation of the nodes to graph
+	   @return  (object) the configured options object */
+	graphviz: function(engine, options, graph) {
+		if (arguments.length == 1) {
+			graph = engine;
+			engine = 'dot';
+		}
+		if (options && typeof options != 'object') {
+			graph = options;
+			options = {};
+		}
+		options = options || {};
+		options.type = 'gv' + (engine != 'dot' ? ':' + engine : '');
+		options.dataLabels = [graph];
 		return options;
 	},
 
@@ -826,6 +847,14 @@ $.extend(GChart.prototype, {
 						return decodeName(shape.name);
 					}
 					break;
+				case 'CIRCLE':
+					if (Math.abs(x - shape.coords[0]) <= shape.coords[2] &&
+							Math.abs(y - shape.coords[1]) <= shape.coords[2] &&
+							Math.sqrt(Math.pow(x - shape.coords[0], 2) +
+							Math.pow(y - shape.coords[1], 2)) <= shape.coords[2]) {
+						return decodeName(shape.name);
+					}
+					break;
 				case 'POLY':
 					if ($.gchart._insidePolygon(shape.coords, x, y)) {
 						return decodeName(shape.name);
@@ -910,7 +939,8 @@ $.extend(GChart.prototype, {
 	   @param  options  (object) the new settings for this Google chart instance
 	   @return  (string) the Google chart URL */
 	_generateChart: function(options) {
-		var type = CHART_TYPES[options.type] || 'p3';
+		var type = (options.type && options.type.match(/.+:.+/) ?
+			options.type : CHART_TYPES[options.type] || 'p3');
 		var encoding = this['_' + options.encoding + 'Encoding'] ||
 			this['_textEncoding'];
 		var labels = '';
@@ -923,9 +953,9 @@ $.extend(GChart.prototype, {
 		var hasColour = false;
 		var lines = '';
 		for (var i = 0; i < options.series.length; i++) {
-			legends += '|' + encodeURIComponent(options.series[i].label || '');
 			var clrs = '';
 			if (type != 'lxy' || i % 2 == 0) {
+				legends += '|' + encodeURIComponent(options.series[i].label || '');
 				var sep = ',';
 				$.each(($.isArray(options.series[i].color) ? options.series[i].color :
 						[options.series[i].color]), function(i, v) {
@@ -973,6 +1003,9 @@ $.extend(GChart.prototype, {
 				'&chld=' + (options.qrECLevel ? options.qrECLevel.charAt(0) : 'l') +
 				(options.qrMargin != null ? '|' + options.qrMargin : '') : '') +
 				(labels ? '&chl=' + labels.substr(1) : '');
+		};
+		var noDataOptions = function() {
+			return '&chl=' + labels.substr(1);
 		};
 		var mapOptions = function() {
 			var colours = '';
@@ -1053,7 +1086,9 @@ $.extend(GChart.prototype, {
 		var addLegends = function() {
 			var order = (options.legendOrder && options.legendOrder.match(/^\d+(,\d+)*$/) ?
 				options.legendOrder : ORDERS[options.legendOrder]) || '';
-			return (!options.legend || legends.length <= options.series.length ? '' :
+			return (!options.legend ||
+				(type != 'lxy' && legends.length <= options.series.length) ||
+				(type == 'lxy' && legends.length <= (options.series.length / 2)) ? '' :
 				'&chdl=' + legends.substr(1) + include('&chdlp=',
 				options.legend.charAt(0) + (options.legend.indexOf('V') > -1 ? 'v' : '') +
 				include('|', order)));
@@ -1069,8 +1104,8 @@ $.extend(GChart.prototype, {
 		return 'http://chart.apis.google.com/chart?' +
 			(format != 'png' ? 'chof=' + format + '&' : '') +
 			'cht=' + type + addSize() + addMargins() +
-			(type == 'qr' ? qrOptions() : (type == 't' ? mapOptions() :
-			(type.charAt(0) == 'p' ? pieOptions() : standardOptions()))) +
+			(type == 'qr' ? qrOptions() : (type.match(/tx|gv(:\w+)?/) ? noDataOptions() :
+			(type == 't' ? mapOptions() : (type.charAt(0) == 'p' ? pieOptions() : standardOptions())))) +
 			addBarSizings() + addLineStyles() + addColours() + addTitle() +
 			this._addAxes(options) + addBackgrounds() + addGrids() +
 			this._addMarkers(options) + this._addIcons(options) + addLegends() + addExtensions();
