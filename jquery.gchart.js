@@ -1,5 +1,5 @@
 /* http://keith-wood.name/gChart.html
-   Google Chart interface for jQuery v1.3.2.
+   Google Chart interface for jQuery v1.3.3.
    See API details at http://code.google.com/apis/chart/.
    Written by Keith Wood (kbwood{at}iinet.com.au) September 2008.
    Dual licensed under the GPL (http://dev.jquery.com/browser/trunk/jquery/GPL-LICENSE.txt) and 
@@ -31,12 +31,13 @@ function GChart() {
 			// bottom, bottomVertical, left, right, or '' for none
 		legendOrder: 'normal', // The order of items within a legend: normal, reverse, automatic
 		legendSize: null, // The minimum size (pixels) of the legend: [width, height]
-		type: 'pie3D', // Type of chart requested: line, lineXY, sparkline,
-			// barHoriz, barVert, barHorizGrouped, barVertGrouped, pie, pie3D (default),
-			// pieConcentric, venn, scatter, radar, radarCurved, map, meter, qrCode, formula
+		type: 'pie3D', // Type of chart requested: line, lineXY, sparkline, barHoriz, barVert,
+			// barHorizGrouped, barVertGrouped, barHorizOverlapped, barVertOverlapped, pie, pie3D (default),
+			// pieConcentric, venn, scatter, radar, radarCurved, map, mapOriginal, meter, qrCode, formula
 		encoding: '', // Type of data encoding: text (default), scaled, simple, extended
 		series: [this.series('Hello World', [60, 40])], // Details about the values to be plotted
 		visibleSeries: 0, // The number of series that are directly displayed, 0 for all
+		functions: [], // Functions to apply to be plotted based on data
 		dataLabels: [], // Labels for the values across all the series
 		axes: [], // Definitions for the various axes, each entry is either
 			// a string of the axis name or a GChartAxis object
@@ -54,9 +55,9 @@ function GChart() {
 			// position (number[2]), offsets (number[2])
 		minValue: 0, // The minimum value of the data, $.gchart.calculate to calculate from data
 		maxValue: 100, // The maximum value of the data, $.gchart.calculate to calculate from data
-		gridSize: [], // The x and y spacings between grid lines
-		gridLine: [], // The line and gap lengths for the grid lines
-		gridOffsets: [], // The x and y offsets for the grid lines
+		gridSize: null, // The x and y spacings between grid lines (number or number[2])
+		gridLine: null, // The line and gap lengths for the grid lines (number or number[2])
+		gridOffsets: null, // The x and y offsets for the grid lines (number or number[2])
 		extension: {}, // Any custom extensions to the Google chart parameters
 		// Bar charts -------------
 		barWidth: null, // The width of each bar (pixels) or 'a' for automatic or 'r' for relative
@@ -66,8 +67,11 @@ function GChart() {
 		// Pie charts -------------
 		pieOrientation: 0, // The angle (degrees) of orientation from the positive x-axis
 		// Maps -------------------
-		mapArea: 'world', // The general area to show: world,
-			// africa, asia, europe, middle_east, south_america, usa
+		mapLatLong: false, // True to use lat/long coords in mapArea
+		mapArea: null, // New maps: (number) pixel border all around or
+			// (number[4]) individual pixel borders or lat/long
+			// Original maps: the general area to show:
+			// world, africa, asia, europe, middle_east, south_america, usa
 		mapRegions: [], // List of country/state codes to plot
 		mapDefaultColor: 'bebebe', // The colour for non-plotted countries/states
 		mapColors: ['blue', 'red'], // The colour range for plotted countries/states
@@ -88,12 +92,12 @@ var COLOURS = {aqua: '008080', black: '000000', blue: '0000ff', fuchsia: 'ff00ff
 	olive: '808000', orange: 'ffa500', purple: '800080', red: 'ff0000', silver: 'c0c0c0',
 	teal: '008080', transparent: '00000000', white: 'ffffff', yellow: 'ffff00'};
 /* Mapping from plugin chart types to Google chart types. */
-var CHART_TYPES = {line: 'lc', lineXY: 'lxy', sparkline: 'ls',
-	barHoriz: 'bhs', barVert: 'bvs', barHorizGrouped: 'bhg', barVertGrouped: 'bvg', graphviz: 'gv',
-	pie: 'p', pie3D: 'p3', pieConcentric: 'pc', venn: 'v', scatter: 's',
-	radar: 'r', radarCurved: 'rs', map: 't', meter: 'gom', qrCode: 'qr', formula: 'tx',
-	lc: 'lc', lxy: 'lxy', ls: 'ls', bhs: 'bhs', bvs: 'bvs', bhg: 'bhg', bvg: 'bvg', gv: 'gv',
-	p: 'p', p3: 'p3', pc: 'pc', v: 'v', s: 's',
+var CHART_TYPES = {line: 'lc', lineXY: 'lxy', sparkline: 'ls', barHoriz: 'bhs', barVert: 'bvs',
+	barHorizGrouped: 'bhg', barVertGrouped: 'bvg', barHorizOverlapped: 'bho', barVertOverlapped: 'bvo',
+	graphviz: 'gv', pie: 'p', pie3D: 'p3', pieConcentric: 'pc', venn: 'v', scatter: 's', radar: 'r',
+	radarCurved: 'rs', map: 'map', mapOriginal: 't', meter: 'gom', qrCode: 'qr', formula: 'tx',
+	lc: 'lc', lxy: 'lxy', ls: 'ls', bhs: 'bhs', bvs: 'bvs', bhg: 'bhg', bvg: 'bvg',
+	bho: 'bho', bvo: 'bvo', gv: 'gv', p: 'p', p3: 'p3', pc: 'pc', v: 'v', s: 's',
 	r: 'r', rs: 'rs', t: 't', gom: 'gom', qr: 'qr', tx: 'tx'};
 /* Mapping from plugin shape types to Google chart shapes. */
 var SHAPES = {annotation: 'A', arrow: 'a', candlestick: 'F', circle: 'o', cross: 'x',
@@ -137,6 +141,14 @@ $.extend(GChart.prototype, {
 	formatScientific: 'e',
 	formatCurrency: 'c',
 
+	/* Latitude and longitude coordinates for the continents. */
+	mapAfrica: [-35, -20, 40, 55],
+	mapAsia: [-15, 40, 75, 180],
+	mapAustralia: [-45, 110, -10, 155],
+	mapEurope: [33, -25, 73, 50],
+	mapNorthAmerica: [5, -175, 75, -50],
+	mapSouthAmerica: [-55, -85, 15, -35],
+
 	/* Override the default settings for all Google chart instances.
 	   @param  options  (object) the new settings to use as defaults */
 	setDefaults: function(options) {
@@ -146,7 +158,7 @@ $.extend(GChart.prototype, {
 	/* Create a new data series.
 	   @param  label       (string, optional) the label for this series
 	   @param  data        (number[]) the data values for this series
-	   @param  colour      (string or string[]) the colour(s) for this series
+	   @param  colour      (string or string[], optional) the colour(s) for this series
 	   @param  fillColour  (string, optional) the fill colour for this series or
 	                       (object, optional) fill slice with attributes color and range ('start:end') or
 						   (object[], optional) array of above
@@ -358,14 +370,27 @@ $.extend(GChart.prototype, {
 	},
 
 	/* Prepare options for a scatter chart.
-	   @param  values   (number[][]) the coordinates of the points:
-	                    [0] is the x-coord, [1] is the y-coord, [2] is the percentage size
+	   @param  values   (number[][2/3]) the coordinates of the points: [0] is the x-coord,
+	                    [1] is the y-coord, [2] (optional) is the percentage size
+	   @param  minMax   (number[2/4]) any minimum and maximum values for the axes (optional)
 	   @param  labels   (string[]) the labels for the groups (optional)
 	   @param  colours  (string[]) the colours for the labels (optional)
 	   @param  options  (object) additional settings (optional)
 	   @return  (object) the configured options object */
-	scatter: function(values, labels, colours, options) {
-		if (!$.isArray(labels)) {
+	scatter: function(values, minMax, labels, colours, options) {
+		if (!$.isArray(minMax)) {
+			options = minMax;
+			colours = null;
+			labels = null;
+			minMax = null;
+		}
+		else if (typeof minMax[0] != 'number') {
+			options = colours;
+			colours = labels;
+			labels = minMax;
+			minMax = null;
+		}
+		if (labels && !$.isArray(labels)) {
 			options = labels;
 			colours = null;
 			labels = null;
@@ -376,6 +401,7 @@ $.extend(GChart.prototype, {
 			series[1][i] = values[i][1];
 			series[2][i] = values[i][2] || 100;
 		}
+		minMax = minMax || [];
 		options = options || {};
 		if (labels) {
 			options.extension = {chdl: labels.join('|')};
@@ -387,8 +413,12 @@ $.extend(GChart.prototype, {
 			$.extend(options.extension, {chco: colours.join('|')});
 		}
 		return $.extend({}, options,
-			{type: 'scatter', series: [$.gchart.series(series[0]),
-				$.gchart.series(series[1]), $.gchart.series(series[2])]});
+			{type: 'scatter', encoding: (minMax.length >= 2 ? 'scaled' : 'text'), series: [
+				(minMax.length >= 2 ? $.gchart.series(series[0], minMax[0], minMax[1]) :
+				$.gchart.series(series[0])),
+				(minMax.length >= 4 ? $.gchart.series(series[1],
+				(minMax[2] != null ? minMax[2] : minMax[0]), (minMax[3] != null ? minMax[3] : minMax[1])) :
+				$.gchart.series(series[1])), $.gchart.series(series[2])]});
 	},
 
 	/* Prepare options for a Venn diagram.
@@ -486,7 +516,10 @@ $.extend(GChart.prototype, {
 	},
 
 	/* Prepare options for a map chart.
-	   @param  mapArea        (string) the region of the world to show (optional)
+	   @param  latLongArea    (boolean) true to specify the area via latitude/longitude (optional)
+	   @param  mapArea        (string) the region of the world to show (original map style) or
+	                          (number[4]) the pixel zoom or lat/long coordinates to show or
+							  (number) all around pixel zoom (optional)
 	   @param  values         (object) the countries/states to plot -
 	                          attributes are country/state codes and values
 	   @param  defaultColour  (string) the colour for regions without values (optional)
@@ -495,14 +528,23 @@ $.extend(GChart.prototype, {
 	   @param  endColour      (string) the ending colour for rendering values (optional)
 	   @param  options        (object) additional settings (optional)
 	   @return  (object) the configured options object */
-	map: function(mapArea, values, defaultColour, colour, endColour, options) {
-		if (typeof mapArea == 'object') { // Optional mapArea
+	map: function(latLongArea, mapArea, values, defaultColour, colour, endColour, options) {
+		if (typeof latLongArea != 'boolean') {
 			options = endColour;
 			endColour = colour;
 			colour = defaultColour;
 			defaultColour = values;
 			values = mapArea;
-			mapArea = 'world';
+			mapArea = latLongArea;
+			latLongArea = false;
+		}
+		if (typeof mapArea == 'object' && !$.isArray(mapArea)) { // Optional mapArea
+			options = endColour;
+			endColour = colour;
+			colour = defaultColour;
+			defaultColour = values;
+			values = mapArea;
+			mapArea = null;
 		}
 		if (typeof defaultColour == 'object') {
 			options = defaultColour;
@@ -523,12 +565,16 @@ $.extend(GChart.prototype, {
 		var data = [];
 		var i = 0;
 		for (var name in values) {
-			mapRegions[i] = name;
+			mapRegions[i] = name.replace(/_/g, '-');
 			data[i] = values[name];
 			i++;
 		}
-		return $.extend({}, options || {}, {type: 'map',
-			mapArea: mapArea, mapRegions: mapRegions,
+		if (typeof mapArea == 'number') {
+			mapArea = [mapArea, mapArea, mapArea, mapArea];
+		}
+		return $.extend({}, options || {},
+			{type: (typeof mapArea == 'string' ? 'mapOriginal' : 'map'),
+			mapLatLong: latLongArea, mapArea: mapArea, mapRegions: mapRegions,
 			mapDefaultColor: defaultColour || $.gchart._defaults.mapDefaultColor,
 			mapColors: ($.isArray(colour) ? colour : [colour || $.gchart._defaults.mapColors[0],
 			endColour || $.gchart._defaults.mapColors[1]]),
@@ -578,6 +624,47 @@ $.extend(GChart.prototype, {
 		options.type = 'gv' + (engine != 'dot' ? ':' + engine : '');
 		options.dataLabels = [graph];
 		return options;
+	},
+
+	/* Generate a data function definition.
+	   @param  series  (number) the output series to generate into
+	   @param  data    (object[]) the function variables list or
+	                   (string) the name of a single variable
+	   @param  series  (number, optional) the input series to use for the variable data or
+	                   the start of a generated range (with end/step)
+	   @param  end     (number, optional) the end of the generated range
+	   @param  step    (number, optional) the step between values in the generated range
+	   @param  fnText  (string) the function call, using the variable(s) above,
+	                   in muParser function syntax
+	   @return  (object) the data function definition */
+	fn: function(series, data, start, end, step, fnText) {
+		if (typeof end == 'string') {
+			fnText = end;
+			end = null;
+			step = null;
+		}
+		if (typeof start == 'string') {
+			fnText = start;
+			start = null;
+			end = null;
+			step = null;
+		}
+		if (typeof data == 'string') {
+			data = this.fnVar(data, start, end, step);
+		}
+		return {series: series, data: data, fnText: fnText};
+	},
+
+	/* Generate a function variable definition.
+	   @param  name   (string) the variable name
+	   @param  start  (number) the input series to use for the variable data or
+	                  (number) the start of a generated range (with end/step)
+	   @param  end    (number, optional) the end of the generated range
+	   @param  step   (number, optional) the step between values in the generated range
+	   @return  (object) the function variable definition */
+	fnVar: function(name, start, end, step) {
+		return {name: name, series: (step ? -1 : start),
+			start: (step ? start : null), end: end, step: step};
 	},
 
 	/* Generate a Google chart color.
@@ -978,13 +1065,13 @@ $.extend(GChart.prototype, {
 			return (value ? name + value : '');
 		};
 		var addSize = function() {
-			options.width = Math.max(10, Math.min(options.width, 1000));
-			options.height = Math.max(10, Math.min(options.height, 1000));
-			if (type != 't' && options.width * options.height > 300000) {
+			var maxSize = (type == 'map' || type == 't' ? 600 : 1000);
+			options.width = Math.max(10, Math.min(options.width, maxSize));
+			options.height = Math.max(10, Math.min(options.height, maxSize));
+			if (options.width * options.height > 300000) {
 				options.height = Math.floor(300000 / options.width);
 			}
-			return (type != 't' ? '&chs=' + options.width + 'x' + options.height :
-				'&chs=' + Math.min(440, options.width) + 'x' + Math.min(220, options.height));
+			return 'chs=' + options.width + 'x' + options.height;
 		};
 		var addMargins = function() {
 			var margins = options.margins;
@@ -1012,10 +1099,13 @@ $.extend(GChart.prototype, {
 			for (var i = 0; i < options.mapColors.length; i++) {
 				colours += ',' + $.gchart.color(options.mapColors[i]);
 			}
-			return '&chtm=' + (options.mapArea || 'world') +
+			return (typeof options.mapArea == 'string' ? '&chtm=' + options.mapArea :
+				(options.mapArea ? (options.mapLatLong ? ':fixed=' : ':auto=') +
+				($.isArray(options.mapArea) ? options.mapArea.join(',') :
+				options.mapArea + ',' + options.mapArea + ',' + options.mapArea + ',' + options.mapArea) : '')) +
 				'&chd=' + encoding.apply($.gchart, [options]) +
 				(options.mapRegions && options.mapRegions.length ?
-				'&chld=' + options.mapRegions.join('') : '') +
+				'&chld=' + options.mapRegions.join(typeof options.mapArea == 'string' ? '' : '|') : '') +
 				'&chco=' + $.gchart.color(options.mapDefaultColor) + colours;
 		};
 		var pieOptions = function() {
@@ -1026,6 +1116,21 @@ $.extend(GChart.prototype, {
 		var standardOptions = function() {
 			return '&chd=' + encoding.apply($.gchart, [options]) +
 				(labels ? '&chl=' + labels.substr(1) : '');
+		};
+		var addDataFunctions = function() {
+			var fns = '';
+			for (var i = 0; i < options.functions.length; i++) {
+				var fn = options.functions[i];
+				var data = '';
+				fn.data = ($.isArray(fn.data) ? fn.data : [fn.data]);
+				for (var j = 0; j < fn.data.length; j++) {
+					var fnVar = fn.data[j];
+					data += ';' + fnVar.name + ',' + (fnVar.series != -1 ? fnVar.series :
+						fnVar.start + ',' + fnVar.end + ',' + fnVar.step);
+				}
+				fns += '|' + fn.series + ',' + data.substr(1) + ',' + encodeURIComponent(fn.fnText);
+			}
+			return (fns ? '&chfd=' + fns.substr(1) : '');
 		};
 		var addBarSizings = function() {
 			return (type.substr(0, 1) != 'b' ? '' : (options.barWidth == null ? '' :
@@ -1076,12 +1181,15 @@ $.extend(GChart.prototype, {
 			return (backgrounds ? '&chf=' + backgrounds.substr(1) : '');
 		};
 		var addGrids = function() {
-			return (options.gridSize.length == 0 ? '' :
-				'&chg=' + options.gridSize[0] + ',' + options.gridSize[1] +
-				(options.gridLine.length == 0 ? '' :
-				',' + options.gridLine[0] + ',' + options.gridLine[1] +
-				(options.gridOffsets.length == 0 ? '' :
-				',' + options.gridOffsets[0] + ',' + options.gridOffsets[1])));
+			var size = (typeof options.gridSize == 'number' ?
+				[options.gridSize, options.gridSize] : options.gridSize);
+			var line = (typeof options.gridLine == 'number' ?
+				[options.gridLine, options.gridLine] : options.gridLine);
+			var offsets = (typeof options.gridOffsets == 'number' ?
+				[options.gridOffsets, options.gridOffsets] : options.gridOffsets);
+			return (!size ? '' : '&chg=' + size[0] + ',' + size[1] +
+				(!line ? '' : ',' + line[0] + ',' + line[1] +
+				(!offsets ? '' : ',' + offsets[0] + ',' + offsets[1])));
 		};
 		var addLegends = function() {
 			var order = (options.legendOrder && options.legendOrder.match(/^\d+(,\d+)*$/) ?
@@ -1101,13 +1209,13 @@ $.extend(GChart.prototype, {
 			return params;
 		};
 		var format = options.format || 'png';
-		return 'http://chart.apis.google.com/chart?' +
-			(format != 'png' ? 'chof=' + format + '&' : '') +
-			'cht=' + type + addSize() + addMargins() +
+		return 'http://chart.apis.google.com/chart?' + addSize() +
+			(format != 'png' ? '&chof=' + format : '') + '&cht=' + type +
 			(type == 'qr' ? qrOptions() : (type.match(/tx|gv(:\w+)?/) ? noDataOptions() :
-			(type == 't' ? mapOptions() : (type.charAt(0) == 'p' ? pieOptions() : standardOptions())))) +
-			addBarSizings() + addLineStyles() + addColours() + addTitle() +
-			this._addAxes(options) + addBackgrounds() + addGrids() +
+			(type == 'map' || type == 't' ? mapOptions() :
+			(type.charAt(0) == 'p' ? pieOptions() : standardOptions())))) +
+			addMargins() + addDataFunctions() + addBarSizings() + addLineStyles() +
+			addColours() + addTitle() + this._addAxes(options) + addBackgrounds() + addGrids() +
 			this._addMarkers(options) + this._addIcons(options) + addLegends() + addExtensions();
 	},
 
@@ -1569,7 +1677,7 @@ function GChartAxis(axis, labels, positions, rangeStart, rangeEnd, rangeInterval
 	this._axis = axis;
 	this._labels = labels;
 	this._positions = positions;
-	this._range = (rangeStart != null ? [rangeStart, rangeEnd, rangeInterval] : null);
+	this._range = (rangeStart != null ? [rangeStart, rangeEnd, rangeInterval || null] : null);
 	this._color = colour;
 	this._alignment = alignment;
 	this._size = size;
@@ -1627,7 +1735,7 @@ $.extend(GChartAxis.prototype, {
 		if (arguments.length == 0) {
 			return this._range;
 		}
-		this._range = [start, end, interval];
+		this._range = [start, end, interval || null];
 		return this;
 	},
 

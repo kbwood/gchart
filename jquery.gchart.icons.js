@@ -1,5 +1,5 @@
 /* http://keith-wood.name/gChart.html
-   Google Chart icons extension for jQuery v1.3.2.
+   Google Chart icons extension for jQuery v1.3.3.
    See API details at http://code.google.com/apis/chart/.
    Written by Keith Wood (kbwood{at}iinet.com.au) September 2008.
    Dual licensed under the GPL (http://dev.jquery.com/browser/trunk/jquery/GPL-LICENSE.txt) and 
@@ -12,7 +12,15 @@
 var PLACEMENTS = {center: 'h', centre: 'h', left: 'l', right: 'r', h: 'h', l: 'l', r: 'r'};
 /* Mapping from icon tail names to chart tail codes. */
 var TAILS = {bottomLeft: 'bb', topLeft: 'bbtl', topRight: 'bbtr', bottomRight: 'bbbr', none: 'bbT',
-	bb: 'bb', bbtl: 'bbtl', bbtr: 'bbtr', bbbr: 'bbbr', bbT: 'bbT'};
+	bb: 'bb', bbtl: 'bbtl', bbtr: 'bbtr', bbbr: 'bbbr', bbT: 'bbT',
+	edgeBottomLeft: 'edge_bl', edgeBottomCenter: 'edge_bc', edgeBottomRight: 'edge_br',
+	edgeTopLeft: 'edge_tl', edgeTopCenter: 'edge_tc', edgeTopRight: 'edge_tr',
+	edgeLeftTop: 'edge_lt', edgeLeftCenter: 'edge_lc', edgeLeftBottom: 'edge_lb',
+	edgeRightTop: 'edge_rt', edgeRightCenter: 'edge_rc', edgeRightBottom: 'edge_rb',
+	edgeBL: 'edge_bl', edgeBC: 'edge_bc', edgeBR: 'edge_br',
+	edgeTL: 'edge_tl', edgeTC: 'edge_tc', edgeTR: 'edge_tr',
+	edgeLT: 'edge_lt', edgeLC: 'edge_lc', edgeLB: 'edge_lb',
+	edgeRT: 'edge_rt', edgeRC: 'edge_rc', edgeRB: 'edge_rb'};
 /* Mapping from icon map pin style names to chart map pin style codes. */
 var PIN_STYLES = {none: 'pin', star: 'pin_star', left: 'pin_sleft', right: 'pin_sright'};
 /* Mapping from icon shadow names to chart icon shadow codes. */
