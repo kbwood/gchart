@@ -1,5 +1,5 @@
 /* http://keith-wood.name/gChart.html
-   Google Chart interface for jQuery v1.3.3.
+   Google Chart interface for jQuery v1.4.0.
    See API details at http://code.google.com/apis/chart/.
    Written by Keith Wood (kbwood{at}iinet.com.au) September 2008.
    Dual licensed under the GPL (http://dev.jquery.com/browser/trunk/jquery/GPL-LICENSE.txt) and 
@@ -50,9 +50,6 @@ function GChart() {
 			// color (string), series (number), item (number), size (number),
 			// priority (number), text (string), positioned (boolean),
 			// placement (string or string[]), offsets (number[2])
-		icons: [], // Definitions of dynamic icons for the chart, each entry is an object with
-			// name (string), data (string), series (number), item (number), zIndex (number),
-			// position (number[2]), offsets (number[2])
 		minValue: 0, // The minimum value of the data, $.gchart.calculate to calculate from data
 		maxValue: 100, // The maximum value of the data, $.gchart.calculate to calculate from data
 		gridSize: null, // The x and y spacings between grid lines (number or number[2])
@@ -66,22 +63,21 @@ function GChart() {
 		barZeroPoint: null, // The position (0.0 to 1.0) of the zero-line
 		// Pie charts -------------
 		pieOrientation: 0, // The angle (degrees) of orientation from the positive x-axis
-		// Maps -------------------
-		mapLatLong: false, // True to use lat/long coords in mapArea
-		mapArea: null, // New maps: (number) pixel border all around or
-			// (number[4]) individual pixel borders or lat/long
-			// Original maps: the general area to show:
-			// world, africa, asia, europe, middle_east, south_america, usa
-		mapRegions: [], // List of country/state codes to plot
-		mapDefaultColor: 'bebebe', // The colour for non-plotted countries/states
-		mapColors: ['blue', 'red'], // The colour range for plotted countries/states
-		// QR Code ----------------
-		qrECLevel: null, // Error correction level: low, medium, quarter, high
-		qrMargin: null, // Margin (squares) around QR code, default is 4
 		// Callback
 		onLoad: null, // Function to call when loaded
 		provideJSON: false // True to return JSON description of chart with the onLoad callback
 	};
+	/* Mapping from chart type to options function: xxxOptions(). */
+	this._typeOptions = {'': 'standard', p: 'pie', p3: 'pie', pc: 'pie'};
+	/* List of additional options functions: addXXX(). */
+	this._chartOptions = ['Margins', 'DataFunctions', 'BarSizings', 'LineStyles', 'Colours',
+		'Title', 'Axes', 'Backgrounds', 'Grids', 'Markers', 'Legends', 'Extensions'];
+	/* Mapping from plugin chart types to Google chart types. */
+	this._chartTypes = {line: 'lc', lineXY: 'lxy', sparkline: 'ls', barHoriz: 'bhs', barVert: 'bvs',
+		barHorizGrouped: 'bhg', barVertGrouped: 'bvg', barHorizOverlapped: 'bho', barVertOverlapped: 'bvo',
+		pie: 'p', pie3D: 'p3', pieConcentric: 'pc', radar: 'r', radarCurved: 'rs', 
+		lc: 'lc', lxy: 'lxy', ls: 'ls', bhs: 'bhs', bvs: 'bvs', bhg: 'bhg', bvg: 'bvg',
+		bho: 'bho', bvo: 'bvo', p: 'p', p3: 'p3', pc: 'pc', r: 'r', rs: 'rs'};
 };
 
 /* The name of the data property that holds the instance settings. */
@@ -91,14 +87,6 @@ var COLOURS = {aqua: '008080', black: '000000', blue: '0000ff', fuchsia: 'ff00ff
 	green: '008000', grey: '808080', lime: '00ff00', maroon: '800000', navy: '000080',
 	olive: '808000', orange: 'ffa500', purple: '800080', red: 'ff0000', silver: 'c0c0c0',
 	teal: '008080', transparent: '00000000', white: 'ffffff', yellow: 'ffff00'};
-/* Mapping from plugin chart types to Google chart types. */
-var CHART_TYPES = {line: 'lc', lineXY: 'lxy', sparkline: 'ls', barHoriz: 'bhs', barVert: 'bvs',
-	barHorizGrouped: 'bhg', barVertGrouped: 'bvg', barHorizOverlapped: 'bho', barVertOverlapped: 'bvo',
-	graphviz: 'gv', pie: 'p', pie3D: 'p3', pieConcentric: 'pc', venn: 'v', scatter: 's', radar: 'r',
-	radarCurved: 'rs', map: 'map', mapOriginal: 't', meter: 'gom', qrCode: 'qr', formula: 'tx',
-	lc: 'lc', lxy: 'lxy', ls: 'ls', bhs: 'bhs', bvs: 'bvs', bhg: 'bhg', bvg: 'bvg',
-	bho: 'bho', bvo: 'bvo', gv: 'gv', p: 'p', p3: 'p3', pc: 'pc', v: 'v', s: 's',
-	r: 'r', rs: 'rs', t: 't', gom: 'gom', qr: 'qr', tx: 'tx'};
 /* Mapping from plugin shape types to Google chart shapes. */
 var SHAPES = {annotation: 'A', arrow: 'a', candlestick: 'F', circle: 'o', cross: 'x',
 	diamond: 'd', down: 'v', errorbar: 'E', flag: 'f', financial: 'F', horizbar: 'H',
@@ -125,11 +113,14 @@ var SIMPLE_ENCODING = 'ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz01234
 var EXTENDED_ENCODING = 'ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789-.';
 
 $.extend(GChart.prototype, {
+	/* The base function/class. */
+	_prototype: GChart,
+
 	/* Class name added to elements to indicate already configured with Google charting. */
 	markerClassName: 'hasGChart',
 	
 	/* Marker value to indicate min/max calculation from data. */
-	calculate: -0.123,
+	calculate: -0.123456,
 	
 	/* Possible values for bar width. */
 	barWidthAuto: 'a', // Automatic resize to fill
@@ -140,14 +131,6 @@ $.extend(GChart.prototype, {
 	formatPercent: 'p',
 	formatScientific: 'e',
 	formatCurrency: 'c',
-
-	/* Latitude and longitude coordinates for the continents. */
-	mapAfrica: [-35, -20, 40, 55],
-	mapAsia: [-15, 40, 75, 180],
-	mapAustralia: [-45, 110, -10, 155],
-	mapEurope: [33, -25, 73, 50],
-	mapNorthAmerica: [5, -175, 75, -50],
-	mapSouthAmerica: [-55, -85, 15, -35],
 
 	/* Override the default settings for all Google chart instances.
 	   @param  options  (object) the new settings to use as defaults */
@@ -369,263 +352,6 @@ $.extend(GChart.prototype, {
 		return xySeries;
 	},
 
-	/* Prepare options for a scatter chart.
-	   @param  values   (number[][2/3]) the coordinates of the points: [0] is the x-coord,
-	                    [1] is the y-coord, [2] (optional) is the percentage size
-	   @param  minMax   (number[2/4]) any minimum and maximum values for the axes (optional)
-	   @param  labels   (string[]) the labels for the groups (optional)
-	   @param  colours  (string[]) the colours for the labels (optional)
-	   @param  options  (object) additional settings (optional)
-	   @return  (object) the configured options object */
-	scatter: function(values, minMax, labels, colours, options) {
-		if (!$.isArray(minMax)) {
-			options = minMax;
-			colours = null;
-			labels = null;
-			minMax = null;
-		}
-		else if (typeof minMax[0] != 'number') {
-			options = colours;
-			colours = labels;
-			labels = minMax;
-			minMax = null;
-		}
-		if (labels && !$.isArray(labels)) {
-			options = labels;
-			colours = null;
-			labels = null;
-		}
-		var series = [[], [], []];
-		for (var i = 0; i < values.length; i++) {
-			series[0][i] = values[i][0];
-			series[1][i] = values[i][1];
-			series[2][i] = values[i][2] || 100;
-		}
-		minMax = minMax || [];
-		options = options || {};
-		if (labels) {
-			options.extension = {chdl: labels.join('|')};
-		}
-		if (colours) {
-			colours = $.map(colours, function(v, i) {
-				return $.gchart.color(v);
-			});
-			$.extend(options.extension, {chco: colours.join('|')});
-		}
-		return $.extend({}, options,
-			{type: 'scatter', encoding: (minMax.length >= 2 ? 'scaled' : 'text'), series: [
-				(minMax.length >= 2 ? $.gchart.series(series[0], minMax[0], minMax[1]) :
-				$.gchart.series(series[0])),
-				(minMax.length >= 4 ? $.gchart.series(series[1],
-				(minMax[2] != null ? minMax[2] : minMax[0]), (minMax[3] != null ? minMax[3] : minMax[1])) :
-				$.gchart.series(series[1])), $.gchart.series(series[2])]});
-	},
-
-	/* Prepare options for a Venn diagram.
-	   @param  size1       (number) the relative size of the first circle
-	   @param  size2       (number) the relative size of the second circle
-	   @param  size3       (number) the relative size of the third circle
-	   @param  overlap12   (number) the overlap between circles 1 and 2
-	   @param  overlap13   (number) the overlap between circles 1 and 3
-	   @param  overlap23   (number) the overlap between circles 2 and 3
-	   @param  overlap123  (number) the overlap between all circles
-	   @param  options     (object) additional settings (optional)
-	   @return  (object) the configured options object */
-	venn: function(size1, size2, size3, overlap12, overlap13, overlap23, overlap123, options) {
-		return $.extend({}, options || {}, {type: 'venn', series:
-			[$.gchart.series([size1, size2, size3, overlap12, overlap13, overlap23, overlap123])]});
-	},
-
-	/* Prepare options for a Google meter.
-	   @param  text      (string or string[]) the text to show on the arrow (optional)
-	   @param  values    (number or number[] or [] of these) the position(s) of the arrow(s)
-	   @param  maxValue  (number) the maximum value for the meter (optional, default 100)
-	   @param  colours   (string[]) the colours to use for the band (optional)
-	   @param  labels    (string[]) labels appearing beneath the meter (optional)
-	   @param  styles    (number[][4]) the styles of each series' arrows:
-	                     width, dash, space, arrow size (optional)
-	   @param  options   (object) additional settings (optional)
-	   @return  (object) the configured options object */
-	meter: function(text, values, maxValue, colours, labels, styles, options) {
-		if (typeof text != 'string' && !$.isArray(text)) {
-			options = styles;
-			styles = labels;
-			labels = colours;
-			colours = maxValue;
-			maxValue = values;
-			values = text;
-			text = '';
-		}
-		if (typeof maxValue != 'number') {
-			options = styles;
-			styles = labels;
-			labels = colours;
-			colours = maxValue;
-			maxValue = null;
-		}
-		if (!$.isArray(colours)) {
-			options = styles;
-			styles = labels;
-			labels = colours;
-			colours = null;
-		}
-		if (!$.isArray(labels)) {
-			options = styles;
-			styles = labels;
-			labels = null;
-		}
-		if (!$.isArray(styles)) {
-			options = styles;
-			styles = null;
-		}
-		values = ($.isArray(values) ? values : [values]);
-		var multi = false;
-		for (var i = 0; i < values.length; i++) {
-			multi = multi || $.isArray(values[i]);
-		}
-		var ss = (multi ? [] : [$.gchart.series(values)]);
-		if (multi) {
-			for (var i = 0; i < values.length; i++) {
-				ss.push($.gchart.series($.isArray(values[i]) ? values[i] : [values[i]]));
-			}
-		}
-		values = ss;
-		if (colours) {
-			var cs = '';
-			$.each(colours, function(i, v) {
-				cs += ',' + $.gchart.color(v);
-			});
-			colours = cs.substr(1);
-		}
-		if (styles) {
-			var ls = ['', ''];
-			$.each(styles, function(i, v) {
-				v = ($.isArray(v) ? v : [v]);
-				ls[0] += '|' + $.gchart.color(v.slice(0, 3).join(','));
-				ls[1] += '|' + (v[3] || 15);
-			});
-			styles = ls[0].substr(1) + ls[1];
-		}
-		var axis = (labels && labels.length ?  $.gchart.axis('y', labels) : null);
-		return $.extend({}, options || {}, {type: 'meter',
-			maxValue: maxValue || 100, series: values,
-			dataLabels: ($.isArray(text) ? text : [text || ''])},
-			(colours ? {extension: {chco: colours}} : {}),
-			(axis ? {axes: [axis]} : {}),
-			(styles ? {extension: {chls: styles}} : {}));
-	},
-
-	/* Prepare options for a map chart.
-	   @param  latLongArea    (boolean) true to specify the area via latitude/longitude (optional)
-	   @param  mapArea        (string) the region of the world to show (original map style) or
-	                          (number[4]) the pixel zoom or lat/long coordinates to show or
-							  (number) all around pixel zoom (optional)
-	   @param  values         (object) the countries/states to plot -
-	                          attributes are country/state codes and values
-	   @param  defaultColour  (string) the colour for regions without values (optional)
-	   @param  colour         (string or string[]) the starting colour or
-	                          gradient colours for rendering values (optional)
-	   @param  endColour      (string) the ending colour for rendering values (optional)
-	   @param  options        (object) additional settings (optional)
-	   @return  (object) the configured options object */
-	map: function(latLongArea, mapArea, values, defaultColour, colour, endColour, options) {
-		if (typeof latLongArea != 'boolean') {
-			options = endColour;
-			endColour = colour;
-			colour = defaultColour;
-			defaultColour = values;
-			values = mapArea;
-			mapArea = latLongArea;
-			latLongArea = false;
-		}
-		if (typeof mapArea == 'object' && !$.isArray(mapArea)) { // Optional mapArea
-			options = endColour;
-			endColour = colour;
-			colour = defaultColour;
-			defaultColour = values;
-			values = mapArea;
-			mapArea = null;
-		}
-		if (typeof defaultColour == 'object') {
-			options = defaultColour;
-			endColour = null;
-			colour = null;
-			defaultColour = null;
-		}
-		else if (typeof colour == 'object' && !$.isArray(colour)) {
-			options = colour;
-			endColour = null;
-			colour = null;
-		}
-		else if (typeof endColour == 'object') {
-			options = endColour;
-			endColour = null;
-		}
-		var mapRegions = [];
-		var data = [];
-		var i = 0;
-		for (var name in values) {
-			mapRegions[i] = name.replace(/_/g, '-');
-			data[i] = values[name];
-			i++;
-		}
-		if (typeof mapArea == 'number') {
-			mapArea = [mapArea, mapArea, mapArea, mapArea];
-		}
-		return $.extend({}, options || {},
-			{type: (typeof mapArea == 'string' ? 'mapOriginal' : 'map'),
-			mapLatLong: latLongArea, mapArea: mapArea, mapRegions: mapRegions,
-			mapDefaultColor: defaultColour || $.gchart._defaults.mapDefaultColor,
-			mapColors: ($.isArray(colour) ? colour : [colour || $.gchart._defaults.mapColors[0],
-			endColour || $.gchart._defaults.mapColors[1]]),
-			series: [$.gchart.series('', data)]});
-	},
-
-	/* Prepare options for generating a QR Code.
-	   @param  text      (object) the QR code settings or
-	                     (string) the text to encode
-	   @param  encoding  (string) the encoding scheme (optional)
-	   @param  ecLevel   (string) the error correction level: l, m, q, h (optional)
-	   @param  margin    (number) the margin around the code (optional)
-	   @return  (object) the configured options object */
-	qrCode: function(text, encoding, ecLevel, margin) {
-		var options = {};
-		if (typeof text == 'object') {
-			options = text;
-		}
-		else { // Individual fields
-			options = {dataLabels: [text], encoding: encoding,
-				qrECLevel: ecLevel, qrMargin: margin};
-		}
-		options.type = 'qrCode';
-		if (options.text) {
-			options.dataLabels = [options.text];
-			options.text = null;
-		}
-		return options;
-	},
-
-	/* Prepare options for a GraphViz chart.
-	   @param  engine    (string, optional) the graphing engine to use:
-	                     dot (default), neato, twopi, circo, fdp
-	   @param  options   (object, optional) other options for the chart
-	   @param  graph     (string) the DOT representation of the nodes to graph
-	   @return  (object) the configured options object */
-	graphviz: function(engine, options, graph) {
-		if (arguments.length == 1) {
-			graph = engine;
-			engine = 'dot';
-		}
-		if (options && typeof options != 'object') {
-			graph = options;
-			options = {};
-		}
-		options = options || {};
-		options.type = 'gv' + (engine != 'dot' ? ':' + engine : '');
-		options.dataLabels = [graph];
-		return options;
-	},
-
 	/* Generate a data function definition.
 	   @param  series  (number) the output series to generate into
 	   @param  data    (object[]) the function variables list or
@@ -844,34 +570,6 @@ $.extend(GChart.prototype, {
 			positioned: positioned, placement: placement, offsets: offsets};
 	},
 
-	/* Create a dynamic icon definition.
-	   @param  name      (string) the name of the icon to use
-	   @param  data      (string) the icon's encoded parameters
-	   @param  series    (number, optional) the series to which the icon applies
-	   @param  item      (number or string or number[2 or 3], optional)
-	                     the item in the series to which it applies or 'all' (default)
-	                     or 'everyn' or [start, end, every]
-	   @param  zIndex    (number, optional) the z-index (-1.0 to 1.0)
-	   @param  position  (number[2], optional) an absolute chart position (0.0 to 1.0)
-	   @param  offsets   (number[2], optional) pixel offsets
-	   @return  (object) the icon definition */
-	icon: function(name, data, series, item, zIndex, position, offsets) {
-		if ($.isArray(series)) {
-			offsets = item;
-			position = series;
-			zIndex = null;
-			item = null;
-			series = null;
-		}
-		if ($.isArray(zIndex)) {
-			offsets = position;
-			position = zIndex;
-			zIndex = null;
-		}
-		return {name: name, data: data, series: series || 0, item: (item || item == 0 ? item : 'all'),
-			zIndex: zIndex, position: position, offsets: offsets};
-	},
-
 	/* Create a number format for a marker.
 	   @param  type        (object) containing all these settings or
 	                       (string) 'f' for floating point, 'p' for percentage,
@@ -1027,22 +725,142 @@ $.extend(GChart.prototype, {
 	   @return  (string) the Google chart URL */
 	_generateChart: function(options) {
 		var type = (options.type && options.type.match(/.+:.+/) ?
-			options.type : CHART_TYPES[options.type] || 'p3');
-		var encoding = this['_' + options.encoding + 'Encoding'] ||
-			this['_textEncoding'];
+			options.type : this._chartTypes[options.type] || 'p3');
 		var labels = '';
 		for (var i = 0; i < options.dataLabels.length; i++) {
 			labels += '|' + encodeURIComponent(options.dataLabels[i] || '');
 		}
 		labels = (labels.length == options.dataLabels.length ? '' : labels);
-		var legends = '';
+		var format = options.format || 'png';
+		var img = 'http://chart.apis.google.com/chart?' + this.addSize(type, options) +
+			(format != 'png' ? '&chof=' + format : '') + '&cht=' + type +
+			this[(this._typeOptions[type.replace(/:.*/, '')] || this._typeOptions['']) +
+			'Options'](options, labels);
+		for (var i = 0; i < this._chartOptions.length; i++) {
+			img += this['add' + this._chartOptions[i]](type, options);
+		}
+		return img;
+	},
+
+	/* Optionally include a parameter.
+	   @param  name   (string) the parameter name
+	   @param  value  (string) its value
+	   @return  (string) name and value, or blank if no value */
+	_include: function(name, value) {
+		return (value ? name + value : '');
+	},
+
+	/* Generate standard options for charts.
+	   @param  options  (object) the chart settings
+	   @param  labels   (string) the concatenated labels for the chart
+	   @return  (string) the standard chart options */
+	standardOptions: function(options, labels) {
+		var encoding = this['_' + options.encoding + 'Encoding'] || this['_textEncoding'];
+		return '&chd=' + encoding.apply($.gchart, [options]) +
+			(labels ? '&chl=' + labels.substr(1) : '');
+	},
+
+	/* Generate standard options for pie charts.
+	   @param  options  (object) the chart settings
+	   @param  labels   (string) the concatenated labels for the chart
+	   @return  (string) the standard pie chart options */
+	pieOptions: function(options, labels) {
+		return (options.pieOrientation ? '&chp=' + (options.pieOrientation / 180 * Math.PI) : '') +
+			this.standardOptions(options, labels);
+	},
+
+	/* Generate the options for chart size.
+	   @param  type     (string) the encoded chart type
+	   @param  options  (object) the chart settings
+	   @return  (string) the chart size options */
+	addSize: function(type, options) {
+		var maxSize = 1000;
+		options.width = Math.max(10, Math.min(options.width, maxSize));
+		options.height = Math.max(10, Math.min(options.height, maxSize));
+		if (options.width * options.height > 300000) {
+			options.height = Math.floor(300000 / options.width);
+		}
+		return 'chs=' + options.width + 'x' + options.height;
+	},
+
+	/* Generate the options for chart margins.
+	   @param  type     (string) the encoded chart type
+	   @param  options  (object) the chart settings
+	   @return  (string) the chart margin options */
+	addMargins: function(type, options) {
+		var margins = options.margins;
+		margins = (margins == null ? null :
+			(typeof margins == 'number' ? [margins, margins, margins, margins] :
+			(!$.isArray(margins) ? null :
+			(margins.length == 4 ? margins :
+			(margins.length == 2 ? [margins[0], margins[0], margins[1], margins[1]] : null)))));
+		return (!margins ? '' : '&chma=' + margins.join(',') +
+			(!options.legendSize || options.legendSize.length != 2 ? '' :
+			'|' + options.legendSize.join(',')));
+	},
+
+	/* Generate the options for chart data functions.
+	   @param  type     (string) the encoded chart type
+	   @param  options  (object) the chart settings
+	   @return  (string) the chart function options */
+	addDataFunctions: function(type, options) {
+		var fns = '';
+		for (var i = 0; i < options.functions.length; i++) {
+			var fn = options.functions[i];
+			var data = '';
+			fn.data = ($.isArray(fn.data) ? fn.data : [fn.data]);
+			for (var j = 0; j < fn.data.length; j++) {
+				var fnVar = fn.data[j];
+				data += ';' + fnVar.name + ',' + (fnVar.series != -1 ? fnVar.series :
+					fnVar.start + ',' + fnVar.end + ',' + fnVar.step);
+			}
+			fns += '|' + fn.series + ',' + data.substr(1) + ',' + encodeURIComponent(fn.fnText);
+		}
+		return (fns ? '&chfd=' + fns.substr(1) : '');
+	},
+
+	/* Generate the options for bar chart sizings.
+	   @param  type     (string) the encoded chart type
+	   @param  options  (object) the chart settings
+	   @return  (string) the bar chart size options */
+	addBarSizings: function(type, options) {
+		return (type.substr(0, 1) != 'b' ? '' : (options.barWidth == null ? '' :
+			'&chbh=' + options.barWidth +
+			(options.barSpacing == null ? '' : ',' + (options.barWidth == $.gchart.barWidthRelative ?
+			Math.min(Math.max(options.barSpacing, 0.0), 1.0) : options.barSpacing) +
+			(options.barGroupSpacing == null ? '' : ',' + (options.barWidth == $.gchart.barWidthRelative ?
+			Math.min(Math.max(options.barGroupSpacing, 0.0), 1.0) : options.barGroupSpacing)))) +
+			(options.barZeroPoint == null ? '' : '&chp=' + options.barZeroPoint));
+	},
+
+	/* Generate the options for chart line styles.
+	   @param  type     (string) the encoded chart type
+	   @param  options  (object) the chart settings
+	   @return  (string) the chart line style options */
+	addLineStyles: function(type, options) {
+		if (type.charAt(0) != 'l') {
+			return '';
+		}
+		var lines = '';
+		for (var i = 0; i < options.series.length; i++) {
+			if (options.series[i].lineThickness && $.isArray(options.series[i].lineSegments)) {
+				lines += '|' + options.series[i].lineThickness + ',' +
+					options.series[i].lineSegments.join(',');
+			}
+		}
+		return (lines ? '&chls=' + lines.substr(1) : '');
+	},
+
+	/* Generate the options for chart colours.
+	   @param  type     (string) the encoded chart type
+	   @param  options  (object) the chart settings
+	   @return  (string) the chart colour options */
+	addColours: function(type, options) {
 		var colours = '';
 		var hasColour = false;
-		var lines = '';
 		for (var i = 0; i < options.series.length; i++) {
 			var clrs = '';
 			if (type != 'lxy' || i % 2 == 0) {
-				legends += '|' + encodeURIComponent(options.series[i].label || '');
 				var sep = ',';
 				$.each(($.isArray(options.series[i].color) ? options.series[i].color :
 						[options.series[i].color]), function(i, v) {
@@ -1055,104 +873,31 @@ $.extend(GChart.prototype, {
 				});
 			}
 			colours += (hasColour ? clrs : '');
-			if (type.substr(0, 1) == 'l' && options.series[i].lineThickness &&
-					$.isArray(options.series[i].lineSegments)) {
-				lines += '|' + options.series[i].lineThickness + ',' +
-					options.series[i].lineSegments.join(',');
-			}
 		}
-		var include = function(name, value) {
-			return (value ? name + value : '');
-		};
-		var addSize = function() {
-			var maxSize = (type == 'map' || type == 't' ? 600 : 1000);
-			options.width = Math.max(10, Math.min(options.width, maxSize));
-			options.height = Math.max(10, Math.min(options.height, maxSize));
-			if (options.width * options.height > 300000) {
-				options.height = Math.floor(300000 / options.width);
-			}
-			return 'chs=' + options.width + 'x' + options.height;
-		};
-		var addMargins = function() {
-			var margins = options.margins;
-			margins = (margins == null ? null :
-				(typeof margins == 'number' ? [margins, margins, margins, margins] :
-				(!$.isArray(margins) ? null :
-				(margins.length == 4 ? margins :
-				(margins.length == 2 ? [margins[0], margins[0], margins[1], margins[1]] : null)))));
-			return (!margins ? '' : '&chma=' + margins.join(',') +
-				(!options.legendSize || options.legendSize.length != 2 ? '' :
-				'|' + options.legendSize.join(',')));
-		};
-		var qrOptions = function() {
-			return include('&choe=', options.encoding) +
-				(options.qrECLevel || options.qrMargin ?
-				'&chld=' + (options.qrECLevel ? options.qrECLevel.charAt(0) : 'l') +
-				(options.qrMargin != null ? '|' + options.qrMargin : '') : '') +
-				(labels ? '&chl=' + labels.substr(1) : '');
-		};
-		var noDataOptions = function() {
-			return '&chl=' + labels.substr(1);
-		};
-		var mapOptions = function() {
-			var colours = '';
-			for (var i = 0; i < options.mapColors.length; i++) {
-				colours += ',' + $.gchart.color(options.mapColors[i]);
-			}
-			return (typeof options.mapArea == 'string' ? '&chtm=' + options.mapArea :
-				(options.mapArea ? (options.mapLatLong ? ':fixed=' : ':auto=') +
-				($.isArray(options.mapArea) ? options.mapArea.join(',') :
-				options.mapArea + ',' + options.mapArea + ',' + options.mapArea + ',' + options.mapArea) : '')) +
-				'&chd=' + encoding.apply($.gchart, [options]) +
-				(options.mapRegions && options.mapRegions.length ?
-				'&chld=' + options.mapRegions.join(typeof options.mapArea == 'string' ? '' : '|') : '') +
-				'&chco=' + $.gchart.color(options.mapDefaultColor) + colours;
-		};
-		var pieOptions = function() {
-			return (options.pieOrientation ?
-				'&chp=' + (options.pieOrientation / 180 * Math.PI) : '') +
-				standardOptions();
-		};
-		var standardOptions = function() {
-			return '&chd=' + encoding.apply($.gchart, [options]) +
-				(labels ? '&chl=' + labels.substr(1) : '');
-		};
-		var addDataFunctions = function() {
-			var fns = '';
-			for (var i = 0; i < options.functions.length; i++) {
-				var fn = options.functions[i];
-				var data = '';
-				fn.data = ($.isArray(fn.data) ? fn.data : [fn.data]);
-				for (var j = 0; j < fn.data.length; j++) {
-					var fnVar = fn.data[j];
-					data += ';' + fnVar.name + ',' + (fnVar.series != -1 ? fnVar.series :
-						fnVar.start + ',' + fnVar.end + ',' + fnVar.step);
-				}
-				fns += '|' + fn.series + ',' + data.substr(1) + ',' + encodeURIComponent(fn.fnText);
-			}
-			return (fns ? '&chfd=' + fns.substr(1) : '');
-		};
-		var addBarSizings = function() {
-			return (type.substr(0, 1) != 'b' ? '' : (options.barWidth == null ? '' :
-				'&chbh=' + options.barWidth +
-				(options.barSpacing == null ? '' : ',' + (options.barWidth == $.gchart.barWidthRelative ?
-				Math.min(Math.max(options.barSpacing, 0.0), 1.0) : options.barSpacing) +
-				(options.barGroupSpacing == null ? '' : ',' + (options.barWidth == $.gchart.barWidthRelative ?
-				Math.min(Math.max(options.barGroupSpacing, 0.0), 1.0) : options.barGroupSpacing)))) +
-				(options.barZeroPoint == null ? '' : '&chp=' + options.barZeroPoint));
-		};
-		var addLineStyles = function() {
-			return (type.charAt(0) == 'l' && lines ? '&chls=' + lines.substr(1) : '');
-		};
-		var addColours = function() {
-			return (colours.length > options.series.length ? '&chco=' + colours.substr(1) : '');
-		};
-		var addTitle = function() {
-			return include('&chtt=', encodeURIComponent(options.title)) +
+		return (colours.length > options.series.length ? '&chco=' + colours.substr(1) : '');
+	},
+
+	/* Generate the options for chart title.
+	   @param  type     (string) the encoded chart type
+	   @param  options  (object) the chart settings
+	   @return  (string) the chart title options */
+	addTitle: function(type, options) {
+		return $.gchart._include('&chtt=', encodeURIComponent(options.title)) +
 			(options.titleColor || options.titleSize ?
 			'&chts=' + ($.gchart.color(options.titleColor) || '000000') + ',' +
 			(options.titleSize || 20) : '');
-		};
+	},
+
+	/* Generate the options for chart backgrounds.
+	   @param  type     (string) the encoded chart type
+	   @param  options  (object) the chart settings
+	   @return  (string) the chart background options */
+	addBackgrounds: function(type, options) {
+		var opacity = (!options.opacity ? null : '000000' +
+			Math.floor(options.opacity / (options.opacity > 1 ? 100 : 1) * 255).toString(16));
+		if (opacity && opacity.length < 8) {
+			opacity = '0' + opacity;
+		}
 		var addBackground = function(area, background) {
 			if (background == null) {
 				return '';
@@ -1169,60 +914,66 @@ $.extend(GChart.prototype, {
 			}
 			return bg;
 		};
-		var addBackgrounds = function() {
-			var opacity = (!options.opacity ? null : '000000' +
-				Math.floor(options.opacity / (options.opacity > 1 ? 100 : 1) * 255).toString(16));
-			if (opacity && opacity.length < 8) {
-				opacity = '0' + opacity;
+		var backgrounds = addBackground('|a', opacity) +
+			addBackground('|bg', options.backgroundColor) +
+			addBackground('|c', options.chartColor);
+		return (backgrounds ? '&chf=' + backgrounds.substr(1) : '');
+	},
+
+	/* Generate the options for chart grids.
+	   @param  type     (string) the encoded chart type
+	   @param  options  (object) the chart settings
+	   @return  (string) the chart grid options */
+	addGrids: function(type, options) {
+		var size = (typeof options.gridSize == 'number' ?
+			[options.gridSize, options.gridSize] : options.gridSize);
+		var line = (typeof options.gridLine == 'number' ?
+			[options.gridLine, options.gridLine] : options.gridLine);
+		var offsets = (typeof options.gridOffsets == 'number' ?
+			[options.gridOffsets, options.gridOffsets] : options.gridOffsets);
+		return (!size ? '' : '&chg=' + size[0] + ',' + size[1] +
+			(!line ? '' : ',' + line[0] + ',' + line[1] +
+			(!offsets ? '' : ',' + offsets[0] + ',' + offsets[1])));
+	},
+
+	/* Generate the options for chart legend.
+	   @param  type     (string) the encoded chart type
+	   @param  options  (object) the chart settings
+	   @return  (string) the chart legend options */
+	addLegends: function(type, options) {
+		var legends = '';
+		for (var i = 0; i < options.series.length; i++) {
+			if (type != 'lxy' || i % 2 == 0) {
+				legends += '|' + encodeURIComponent(options.series[i].label || '');
 			}
-			var backgrounds = addBackground('|a', opacity) +
-				addBackground('|bg', options.backgroundColor) +
-				addBackground('|c', options.chartColor);
-			return (backgrounds ? '&chf=' + backgrounds.substr(1) : '');
-		};
-		var addGrids = function() {
-			var size = (typeof options.gridSize == 'number' ?
-				[options.gridSize, options.gridSize] : options.gridSize);
-			var line = (typeof options.gridLine == 'number' ?
-				[options.gridLine, options.gridLine] : options.gridLine);
-			var offsets = (typeof options.gridOffsets == 'number' ?
-				[options.gridOffsets, options.gridOffsets] : options.gridOffsets);
-			return (!size ? '' : '&chg=' + size[0] + ',' + size[1] +
-				(!line ? '' : ',' + line[0] + ',' + line[1] +
-				(!offsets ? '' : ',' + offsets[0] + ',' + offsets[1])));
-		};
-		var addLegends = function() {
-			var order = (options.legendOrder && options.legendOrder.match(/^\d+(,\d+)*$/) ?
-				options.legendOrder : ORDERS[options.legendOrder]) || '';
-			return (!options.legend ||
-				(type != 'lxy' && legends.length <= options.series.length) ||
-				(type == 'lxy' && legends.length <= (options.series.length / 2)) ? '' :
-				'&chdl=' + legends.substr(1) + include('&chdlp=',
-				options.legend.charAt(0) + (options.legend.indexOf('V') > -1 ? 'v' : '') +
-				include('|', order)));
-		};
-		var addExtensions = function() {
-			var params = '';
-			for (var name in options.extension) {
-				params += '&' + name + '=' + options.extension[name];
-			}
-			return params;
-		};
-		var format = options.format || 'png';
-		return 'http://chart.apis.google.com/chart?' + addSize() +
-			(format != 'png' ? '&chof=' + format : '') + '&cht=' + type +
-			(type == 'qr' ? qrOptions() : (type.match(/tx|gv(:\w+)?/) ? noDataOptions() :
-			(type == 'map' || type == 't' ? mapOptions() :
-			(type.charAt(0) == 'p' ? pieOptions() : standardOptions())))) +
-			addMargins() + addDataFunctions() + addBarSizings() + addLineStyles() +
-			addColours() + addTitle() + this._addAxes(options) + addBackgrounds() + addGrids() +
-			this._addMarkers(options) + this._addIcons(options) + addLegends() + addExtensions();
+		}
+		var order = (options.legendOrder && options.legendOrder.match(/^\d+(,\d+)*$/) ?
+			options.legendOrder : ORDERS[options.legendOrder]) || '';
+		return (!options.legend ||
+			(type != 'lxy' && legends.length <= options.series.length) ||
+			(type == 'lxy' && legends.length <= (options.series.length / 2)) ? '' :
+			'&chdl=' + legends.substr(1) + $.gchart._include('&chdlp=',
+			options.legend.charAt(0) + (options.legend.indexOf('V') > -1 ? 'v' : '') +
+			$.gchart._include('|', order)));
+	},
+
+	/* Generate the options for chart extensions.
+	   @param  type     (string) the encoded chart type
+	   @param  options  (object) the chart settings
+	   @return  (string) the chart extension options */
+	addExtensions: function(type, options) {
+		var params = '';
+		for (var name in options.extension) {
+			params += '&' + name + '=' + options.extension[name];
+		}
+		return params;
 	},
 
 	/* Generate axes parameters.
+	   @param  type     (string) the encoded chart type
 	   @param  options  (object) the current instance settings
 	   @return  (string) the axes parameters */
-	_addAxes: function(options) {
+	addAxes: function(type, options) {
 		var axes = '';
 		var axesLabels = '';
 		var axesPositions = '';
@@ -1278,9 +1029,10 @@ $.extend(GChart.prototype, {
 	},
 
 	/* Generate markers parameters.
+	   @param  type     (string) the encoded chart type
 	   @param  options  (object) the current instance settings
 	   @return  (string) the markers parameters */
-	_addMarkers: function(options) {
+	addMarkers: function(type, options) {
 		var markers = '';
 		var decodeItem = function(item, positioned) {
 			if (item == 'all') {
@@ -1351,36 +1103,6 @@ $.extend(GChart.prototype, {
 			}
 		}
 		return (markers ? '&chm=' + markers.substr(1) : '');
-	},
-
-	/* Generate dynamic icon parameters.
-	   @param  options  (object) the current instance settings
-	   @return  (string) the icons parameters */
-	_addIcons: function(options) {
-		var icons = '';
-		var decodeItem = function(item) {
-			if (item == 'all') {
-				return item;
-			}
-			if (typeof item == 'string') {
-				if (/^every(\d+)$/.exec(item)) {
-					return item.replace(/every/, 'every,');
-				}
-			}
-			if ($.isArray(item)) {
-				return 'range,' + item.join(',');
-			}
-			return item;
-		};
-		for (var i = 0; i < options.icons.length; i++) {
-			var icon = options.icons[i];
-			icons += '|y;s=' + icon.name + ';d=' + icon.data +
-				(icon.position ? '' : ';ds=' + icon.series + ';dp=' + decodeItem(icon.item)) +
-				(icon.zIndex ? ';py=' + icon.zIndex : '') + 
-				(icon.position ? ';po=' + icon.position.join(',') : '') + 
-				(icon.offsets ? ';of=' + icon.offsets.join(',') : '');
-		}
-		return (icons ? '&chem=' + icons.substr(1) : '');
 	},
 
 	/* Update the Google charting div with the new settings.

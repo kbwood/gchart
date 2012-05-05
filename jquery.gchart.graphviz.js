@@ -1,5 +1,5 @@
 /* http://keith-wood.name/gChart.html
-   Google Chart GraphViz extension for jQuery v1.3.3.
+   Google Chart GraphViz extension for jQuery v1.4.0.
    See API details at http://code.google.com/apis/chart/.
    Written by Keith Wood (kbwood{at}iinet.com.au) September 2008.
    Dual licensed under the GPL (http://dev.jquery.com/browser/trunk/jquery/GPL-LICENSE.txt) and 
@@ -8,7 +8,12 @@
 
 (function($) { // Hide scope, no $ conflict
 
-$.extend($.gchart, {
+// New chart types: graphviz
+$.extend($.gchart._chartTypes, {graphviz: 'gv', gv: 'gv'});
+	
+$.extend($.gchart._typeOptions, {gv: 'no'});
+
+$.extend($.gchart._prototype.prototype, {
 
 	/* Prepare options for a GraphViz chart.
 	   @param  engine    (string, optional) the graphing engine to use:
@@ -93,6 +98,14 @@ $.extend($.gchart, {
 		}
 		gdef += '}';
 		return gdef;
+	},
+
+	/* Generate standard options for charts that aren't really charts.
+	   @param  options  (object) the chart settings
+	   @param  labels   (string) the concatenated labels for the chart
+	   @return  (string) the standard non-chart options */
+	noOptions: function(options, labels) {
+		return '&chl=' + labels.substr(1);
 	}
 });
 

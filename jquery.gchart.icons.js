@@ -1,5 +1,5 @@
 /* http://keith-wood.name/gChart.html
-   Google Chart icons extension for jQuery v1.3.3.
+   Google Chart icons extension for jQuery v1.4.0.
    See API details at http://code.google.com/apis/chart/.
    Written by Keith Wood (kbwood{at}iinet.com.au) September 2008.
    Dual licensed under the GPL (http://dev.jquery.com/browser/trunk/jquery/GPL-LICENSE.txt) and 
@@ -29,7 +29,43 @@ var SHADOWS = {no: '', yes: '_withshadow', only: '_shadow'};
 var NOTES = {arrow: 'arrow_d', balloon: 'balloon', pinned: 'pinned_c',
 	sticky: 'sticky_y', taped: 'taped_y', thought: 'thought'};
 
-$.extend($.gchart, {
+$.extend($.gchart._defaults, {
+		icons: [] // Definitions of dynamic icons for the chart, each entry is an object with
+			// name (string), data (string), series (number), item (number), zIndex (number),
+			// position (number[2]), offsets (number[2])
+	});
+
+$.gchart._chartOptions = $.gchart._chartOptions.join().replace(/Markers/, 'Markers,Icons').split(',');
+
+$.extend($.gchart._prototype.prototype, {
+
+	/* Create a dynamic icon definition.
+	   @param  name      (string) the name of the icon to use
+	   @param  data      (string) the icon's encoded parameters
+	   @param  series    (number, optional) the series to which the icon applies
+	   @param  item      (number or string or number[2 or 3], optional)
+	                     the item in the series to which it applies or 'all' (default)
+	                     or 'everyn' or [start, end, every]
+	   @param  zIndex    (number, optional) the z-index (-1.0 to 1.0)
+	   @param  position  (number[2], optional) an absolute chart position (0.0 to 1.0)
+	   @param  offsets   (number[2], optional) pixel offsets
+	   @return  (object) the icon definition */
+	icon: function(name, data, series, item, zIndex, position, offsets) {
+		if ($.isArray(series)) {
+			offsets = item;
+			position = series;
+			zIndex = null;
+			item = null;
+			series = null;
+		}
+		if ($.isArray(zIndex)) {
+			offsets = position;
+			position = zIndex;
+			zIndex = null;
+		}
+		return {name: name, data: data, series: series || 0, item: (item || item == 0 ? item : 'all'),
+			zIndex: zIndex, position: position, offsets: offsets};
+	},
 
 	/* Create a bubble icon definition.
 	   @param  text      (string) the text content, use '|' for line breaks
@@ -437,6 +473,37 @@ $.extend($.gchart, {
 			(PLACEMENTS[alignment] || 'h') + ',' + this.color(outline || 'black') + ',' +
 			(bold ? 'b' : '_') + ',' + this._escapeIconText(text);
 		return this.icon('text_outline', data, series, item, zIndex, position, offsets);
+	},
+
+	/* Generate dynamic icon parameters.
+	   @param  type     (string) the encoded chart type
+	   @param  options  (object) the current instance settings
+	   @return  (string) the icons parameters */
+	addIcons: function(type, options) {
+		var icons = '';
+		var decodeItem = function(item) {
+			if (item == 'all') {
+				return item;
+			}
+			if (typeof item == 'string') {
+				if (/^every(\d+)$/.exec(item)) {
+					return item.replace(/every/, 'every,');
+				}
+			}
+			if ($.isArray(item)) {
+				return 'range,' + item.join(',');
+			}
+			return item;
+		};
+		for (var i = 0; i < options.icons.length; i++) {
+			var icon = options.icons[i];
+			icons += '|y;s=' + icon.name + ';d=' + icon.data +
+				(icon.position ? '' : ';ds=' + icon.series + ';dp=' + decodeItem(icon.item)) +
+				(icon.zIndex ? ';py=' + icon.zIndex : '') + 
+				(icon.position ? ';po=' + icon.position.join(',') : '') + 
+				(icon.offsets ? ';of=' + icon.offsets.join(',') : '');
+		}
+		return (icons ? '&chem=' + icons.substr(1) : '');
 	},
 
 	/* Escape reserved characters in icon text.
