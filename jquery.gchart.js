@@ -1,5 +1,5 @@
 /* http://keith-wood.name/gChart.html
-   Google Chart interface for jQuery v1.1.0.
+   Google Chart interface for jQuery v1.1.1.
    See API details at http://code.google.com/apis/chart/.
    Written by Keith Wood (kbwood@virginbroadband.com.au) September 2008.
    Dual licensed under the GPL (http://dev.jquery.com/browser/trunk/jquery/GPL-LICENSE.txt) and 
@@ -133,7 +133,7 @@ $.extend(GChart.prototype, {
 			fillColour = null;
 			colour = null;
 		}
-		else if (fillColour && typeof fillColour != 'string') { // Optional fillColour
+		else if (fillColour != null && typeof fillColour != 'string') { // Optional fillColour
 			segments = thickness;
 			thickness = maxValue;
 			maxValue = minValue;
@@ -615,14 +615,14 @@ $.extend(GChart.prototype, {
 			this['_textEncoding'];
 		var labels = '';
 		for (var i = 0; i < options.dataLabels.length; i++) {
-			labels += '|' + escape(options.dataLabels[i]);
+			labels += '|' + escape(options.dataLabels[i] || '');
 		}
 		labels = (labels.length == options.dataLabels.length ? '' : labels);
 		var legends = '';
 		var colours = '';
 		var lines = '';
 		for (var i = 0; i < options.series.length; i++) {
-			legends += '|' + (options.series[i].label || '');
+			legends += '|' + escape(options.series[i].label || '');
 			if (type != 'lxy' || i % 2 == 0) {
 				colours += ',' + this.color(options.series[i].color || '');
 			}
@@ -667,7 +667,7 @@ $.extend(GChart.prototype, {
 				var pieSeries = $.gchart.series([]);
 				for (var i = 0; i < options.series.length; i++) {
 					pieSeries.data[pieSeries.data.length] = options.series[i].data[0];
-					pieLabels += '|' + options.series[i].label;
+					pieLabels += '|' + escape(options.series[i].label || '');
 				}
 				options.series = [pieSeries];
 			}
@@ -712,7 +712,7 @@ $.extend(GChart.prototype, {
 				if (options.axes[i].labels) {
 					var labels = '';
 					for (var j = 0; j < options.axes[i].labels.length; j++) {
-						labels += '|' + escape(options.axes[i].labels[j]);
+						labels += '|' + escape(options.axes[i].labels[j] || '');
 					}
 					axesLabels += (labels ? '|' + i + ':' + labels : '');
 				}
