@@ -1,5 +1,5 @@
 /* http://keith-wood.name/gChart.html
-   Google Chart icons extension for jQuery v1.4.1.
+   Google Chart icons extension for jQuery v1.4.2.
    See API details at http://code.google.com/apis/chart/.
    Written by Keith Wood (kbwood{at}iinet.com.au) September 2008.
    Dual licensed under the GPL (http://dev.jquery.com/browser/trunk/jquery/GPL-LICENSE.txt) and 
@@ -28,6 +28,13 @@ var SHADOWS = {no: '', yes: '_withshadow', only: '_shadow'};
 /* Mapping from icon note types to chart icon note codes. */
 var NOTES = {arrow: 'arrow_d', balloon: 'balloon', pinned: 'pinned_c',
 	sticky: 'sticky_y', taped: 'taped_y', thought: 'thought'};
+/* Mapping from contextual alignment names to chart drawing alignment codes. */
+var ALIGNMENTS = {topLeft: 'lt', top: 'ht', topRight: 'rt', left: 'lv', center: 'hv', centre: 'hv',
+	right: 'rv', bottomLeft: 'lb', bottom: 'hb', bottomRight: 'rb',
+	tl: 'lt', lt: 'lt', t: 'ht', ht: 'ht', tr: 'rt', rt: 'rt', l: 'l', lv: 'lv', c: 'hv', hc: 'hv',
+	hv: 'hv', r: 'rv', rv: 'rv', bl: 'lb', lb: 'lb', b: 'hb', hb: 'hb', br: 'rb', rb: 'rb'};
+/* Allowed sizes of icons. */
+var SIZES = {12: 12, 16: 16, 24: 24};
 
 $.extend($.gchart._defaults, {
 		icons: [] // Definitions of dynamic icons for the chart, each entry is an object with
@@ -42,7 +49,7 @@ $.extend($.gchart._prototype.prototype, {
 	/* Create a dynamic icon definition.
 	   @param  name      (string) the name of the icon to use
 	   @param  data      (string) the icon's encoded parameters
-	   @param  series    (number, optional) the series to which the icon applies
+	   @param  series    (number, optional) the series to which the icon applies, -1 for freestanding
 	   @param  item      (number or string or number[2 or 3], optional)
 	                     the item in the series to which it applies or 'all' (default)
 	                     or 'everyn' or [start, end, every]
@@ -368,8 +375,7 @@ $.extend($.gchart._prototype.prototype, {
 	   @param  position  (number[2], optional) an absolute chart position (0.0 to 1.0)
 	   @param  offsets   (number[2], optional) pixel offsets
 	   @return  (object) the icon definition */
-	weatherIcon: function(title, text, type, image,
-			series, item, zIndex, position, offsets) {
+	weatherIcon: function(title, text, type, image, series, item, zIndex, position, offsets) {
 		if (typeof text == 'number') {
 			offsets = item;
 			position = series;
@@ -411,8 +417,8 @@ $.extend($.gchart._prototype.prototype, {
 	   @param  outline    (string, optional) the icon text's outline colour
 	   @param  series     (number, optional) the series to which the icon applies
 	   @param  item       (number or string or number[2 or 3], optional)
-	                     the item in the series to which it applies or 'all' (default)
-	                     or 'everyn' or [start, end, every]
+	                      the item in the series to which it applies or 'all' (default)
+	                      or 'everyn' or [start, end, every]
 	   @param  zIndex     (number, optional) the z-index (-1.0 to 1.0)
 	   @param  position   (number[2], optional) an absolute chart position (0.0 to 1.0)
 	   @param  offsets    (number[2], optional) pixel offsets
@@ -429,6 +435,18 @@ $.extend($.gchart._prototype.prototype, {
 			colour = alignment;
 			alignment = bold;
 			bold = size;
+			size = null;
+		}
+		if (typeof size == 'string') {
+			offsets = zIndex;
+			position = item;
+			zIndex = series;
+			item = outline;
+			series = colour;
+			outline = alignment;
+			colour = bold;
+			alignment = size;
+			bold = null;
 			size = null;
 		}
 		if (typeof bold == 'number') {
@@ -475,12 +493,640 @@ $.extend($.gchart._prototype.prototype, {
 		return this.icon('text_outline', data, series, item, zIndex, position, offsets);
 	},
 
+	/* Create a colour varying icon definition.
+	   @param  image         (string) the name of the icon to use
+	   @param  colourSeries  (number) the series from which colour data is taken
+	   @param  colourLow     (string[3] or string, optional) the icons' fill colour(s) (default 'green')
+	   @param  colourMiddle  (string, optional) the icons' middle fill colour (default 'yellow')
+	   @param  colourHigh    (string, optional) the icons' high fill colour (default 'red')
+	   @param  size          (number, optional) the icon size in pixels - 12, 16, 24 (default 12)
+	   @param  outline       (string, optional) the icons' outline colour (default 'black')
+	   @param  alignment     (string, optional) result of contextualAlignment(...) (default 'hb')
+	   @param  series        (number) the series to which the icon applies
+	   @param  item          (number or string or number[2 or 3], optional)
+	                         the item in the series to which it applies or 'all' (default)
+	                         or 'everyn' or [start, end, every]
+	   @param  zIndex        (number, optional) the z-index (-1.0 to 1.0)
+	   @param  position      (number[2], optional) an absolute chart position (0.0 to 1.0)
+	   @param  offsets       (number[2], optional) pixel offsets
+	   @return  (object) the icon definition */
+	colourVaryIcon: function(image, colourSeries, colourLow, colourMiddle, colourHigh, size, outline, alignment,
+			series, item, zIndex, position, offsets) {
+		if ($.isArray(colourLow)) {
+			offsets = zIndex;
+			position = item;
+			zIndex = series;
+			item = alignment;
+			series = outline;
+			alignment = size;
+			outline = colourHigh;
+			size = colourMiddle;
+			colourHigh = colourLow[2];
+			colourMiddle = colourLow[1];
+			colourLow = colourLow[0];
+		}
+		else if (typeof colourLow != 'string') {
+			offsets = position;
+			position = zIndex;
+			zIndex = item;
+			item = series;
+			series = alignment;
+			alignment = outline;
+			outline = size;
+			size = colourHigh;
+			colourHigh = colourMiddle;
+			colourMiddle = colourLow;
+			colourLow = null;
+		}
+		if (typeof colourMiddle != 'string') {
+			offsets = position;
+			position = zIndex;
+			zIndex = item;
+			item = series;
+			series = alignment;
+			alignment = outline;
+			outline = size;
+			size = colourHigh;
+			colourHigh = colourMiddle;
+			colourMiddle = null;
+		}
+		if (typeof colourHigh != 'string') {
+			offsets = position;
+			position = zIndex;
+			zIndex = item;
+			item = series;
+			series = alignment;
+			alignment = outline;
+			outline = size;
+			size = colourHigh;
+			colourHigh = null;
+		}
+		if (typeof size != 'number') {
+			offsets = position;
+			position = zIndex;
+			zIndex = item;
+			item = series;
+			series = alignment;
+			alignment = outline;
+			outline = size;
+			size = null;
+		}
+		if (typeof outline != 'string') {
+			offsets = position;
+			position = zIndex;
+			zIndex = item;
+			item = series;
+			series = alignment;
+			alignment = outline;
+			outline = null;
+		}
+		if (typeof alignment != 'string') {
+			offsets = position;
+			position = zIndex;
+			zIndex = item;
+			item = series;
+			series = alignment;
+			alignment = null;
+		}
+		var data = image + ',' + (colourSeries || 0) + ',' + this.color(colourLow || 'green') + ',' +
+			this.color(colourMiddle || 'yellow') + ',' + this.color(colourHigh || 'red') + ',' +
+			(SIZES[size] || 12) + ',' + this.color(outline || 'black') + ',' + (alignment || 'hb-0-0');
+		return this.icon('cm_color', data, series, item, zIndex, position, offsets);
+	},
+
+	/* Create a size varying icon definition.
+	   @param  image           (string) the name of the icon to use
+	   @param  sizeSeries      (number) the series from which size data is taken
+	   @param  zeroSize        (number[3] or number, optional) the icons' size at minimum data value (default 4),
+	                           or array of this and next two values
+	   @param  sizeMultiplier  (number, optional) the size scaling factor (default 10)
+	   @param  minSize         (number, optional) the minimum size for any icon in pixels (default 4)
+	   @param  colour          (string, optional) the icons' fill colour (default '#88ff88')
+	   @param  outline         (string, optional) the icons' outline colour (default 'black')
+	   @param  alignment       (string, optional) result of contextualAlignment(...) (default 'hb')
+	   @param  series          (number) the series to which the icon applies
+	   @param  item            (number or string or number[2 or 3], optional)
+	                           the item in the series to which it applies or 'all' (default)
+	                           or 'everyn' or [start, end, every]
+	   @param  zIndex          (number, optional) the z-index (-1.0 to 1.0)
+	   @param  position        (number[2], optional) an absolute chart position (0.0 to 1.0)
+	   @param  offsets         (number[2], optional) pixel offsets
+	   @return  (object) the icon definition */
+	sizeVaryIcon: function(image, sizeSeries, zeroSize, sizeMultiplier, minSize, colour, outline, alignment,
+			series, item, zIndex, position, offsets) {
+		if ($.isArray(zeroSize)) {
+			offsets = zIndex;
+			position = item;
+			zIndex = series;
+			item = alignment;
+			series = outline;
+			alignment = colour;
+			outline = minSize;
+			colour = sizeMultiplier;
+			minSize = zeroSize[2];
+			sizeMultiplier = zeroSize[1];
+			zeroSize = zeroSize[0];
+		}
+		else if (typeof zeroSize != 'number') {
+			offsets = position;
+			position = zIndex;
+			zIndex = item;
+			item = series;
+			series = alignment;
+			alignment = outline;
+			outline = colour;
+			colour = minSize;
+			minSize = sizeMultiplier;
+			sizeMultiplier = zeroSize;
+			zeroSize = null;
+		}
+		if (typeof sizeMultiplier != 'number') {
+			offsets = position;
+			position = zIndex;
+			zIndex = item;
+			item = series;
+			series = alignment;
+			alignment = outline;
+			outline = colour;
+			colour = minSize;
+			minSize = sizeMultiplier;
+			sizeMultiplier = null;
+		}
+		if (typeof minSize != 'number') {
+			offsets = position;
+			position = zIndex;
+			zIndex = item;
+			item = series;
+			series = alignment;
+			alignment = outline;
+			outline = colour;
+			colour = minSize;
+			minSize = null;
+		}
+		if (typeof colour != 'string') {
+			offsets = position;
+			position = zIndex;
+			zIndex = item;
+			item = series;
+			series = alignment;
+			alignment = outline;
+			outline = colour;
+			colour = null;
+		}
+		if (typeof outline != 'string') {
+			offsets = position;
+			position = zIndex;
+			zIndex = item;
+			item = series;
+			series = alignment;
+			alignment = outline;
+			outline = null;
+		}
+		if (typeof alignment != 'string') {
+			offsets = position;
+			position = zIndex;
+			zIndex = item;
+			item = series;
+			series = alignment;
+			alignment = null;
+		}
+		var data = image + ',' + (sizeSeries || 0) + ',' + (zeroSize || 4) + ',' +
+			(sizeMultiplier || 10) + ',' + (minSize || 4) + ',' + this.color(outline || 'black') + ',' +
+			this.color(colour || '#88ff88') + ',' + (alignment || 'hb-0-0');
+		return this.icon('cm_size', data, series, item, zIndex, position, offsets);
+	},
+
+	/* Create a colour and size varying icon definition.
+	   @param  image           (string) the name of the icon to use
+	   @param  colourSeries    (number) the series from which colour data is taken
+	   @param  colourLow       (string[3] or string, optional) the icons' fill colour(s) (default 'green')
+	   @param  colourMiddle    (string, optional) the icons' middle fill colour (default 'yellow')
+	   @param  colourHigh      (string, optional) the icons' high fill colour (default 'red')
+	   @param  sizeSeries      (number) the series from which size data is taken
+	   @param  zeroSize        (number[3] or number, optional) the icons' size at minimum data value (default 4),
+	                           or array of this and next two values
+	   @param  sizeMultiplier  (number, optional) the size scaling factor (default 10)
+	   @param  minSize         (number, optional) the minimum size for any icon in pixels (default 4)
+	   @param  outline         (string, optional) the icons' outline colour (default 'black')
+	   @param  alignment       (string, optional) result of contextualAlignment(...) (default 'hb')
+	   @param  series          (number) the series to which the icon applies
+	   @param  item            (number or string or number[2 or 3], optional)
+	                           the item in the series to which it applies or 'all' (default)
+	                           or 'everyn' or [start, end, every]
+	   @param  zIndex          (number, optional) the z-index (-1.0 to 1.0)
+	   @param  position        (number[2], optional) an absolute chart position (0.0 to 1.0)
+	   @param  offsets         (number[2], optional) pixel offsets
+	   @return  (object) the icon definition */
+	colourSizeVaryIcon: function(image, colourSeries, colourLow, colourMiddle, colourHigh,
+			sizeSeries, zeroSize, sizeMultiplier, minSize, outline, alignment,
+			series, item, zIndex, position, offsets) {
+		if ($.isArray(colourLow)) {
+			offsets = zIndex;
+			position = item;
+			zIndex = series;
+			item = alignment;
+			series = outline;
+			alignment = minSize;
+			outline = sizeMultiplier;
+			minSize = zeroSize;
+			sizeMultiplier = sizeSeries;
+			zeroSize = colourHigh;
+			sizeSeries = colourMiddle;
+			colourHigh = colourLow[2];
+			colourMiddle = colourLow[1];
+			colourLow = colourLow[0];
+		}
+		else if (typeof colourLow != 'string') {
+			offsets = position;
+			position = zIndex;
+			zIndex = item;
+			item = series;
+			series = alignment;
+			alignment = outline;
+			outline = minSize;
+			minSize = sizeMultiplier;
+			sizeMultiplier = zeroSize;
+			zeroSize = sizeSeries;
+			sizeSeries = colourHigh;
+			colourHigh = colourMiddle;
+			colourMiddle = colourLow;
+			colourLow = null;
+		}
+		if (typeof colourMiddle != 'string') {
+			offsets = position;
+			position = zIndex;
+			zIndex = item;
+			item = series;
+			series = alignment;
+			alignment = outline;
+			outline = minSize;
+			minSize = sizeMultiplier;
+			sizeMultiplier = zeroSize;
+			zeroSize = sizeSeries;
+			sizeSeries = colourHigh;
+			colourHigh = colourMiddle;
+			colourMiddle = null;
+		}
+		if (typeof colourHigh != 'string') {
+			offsets = position;
+			position = zIndex;
+			zIndex = item;
+			item = series;
+			series = alignment;
+			alignment = outline;
+			outline = minSize;
+			minSize = sizeMultiplier;
+			sizeMultiplier = zeroSize;
+			zeroSize = sizeSeries;
+			sizeSeries = colourHigh;
+			colourHigh = null;
+		}
+		if ($.isArray(zeroSize)) {
+			offsets = zIndex;
+			position = item;
+			zIndex = series;
+			item = alignment;
+			series = outline;
+			alignment = minSize;
+			outline = sizeMultiplier;
+			minSize = zeroSize[2];
+			sizeMultiplier = zeroSize[1];
+			zeroSize = zeroSize[0];
+		}
+		else if (typeof zeroSize != 'number') {
+			offsets = position;
+			position = zIndex;
+			zIndex = item;
+			item = series;
+			series = alignment;
+			alignment = outline;
+			outline = minSize;
+			minSize = sizeMultiplier;
+			sizeMultiplier = zeroSize;
+			zeroSize = null;
+		}
+		if (typeof sizeMultiplier != 'number') {
+			offsets = position;
+			position = zIndex;
+			zIndex = item;
+			item = series;
+			series = alignment;
+			alignment = outline;
+			outline = minSize;
+			minSize = sizeMultiplier;
+			sizeMultiplier = null;
+		}
+		if (typeof minSize != 'number') {
+			offsets = position;
+			position = zIndex;
+			zIndex = item;
+			item = series;
+			series = alignment;
+			alignment = outline;
+			outline = minSize;
+			minSize = null;
+		}
+		if (typeof outline != 'string') {
+			offsets = position;
+			position = zIndex;
+			zIndex = item;
+			item = series;
+			series = alignment;
+			alignment = outline;
+			outline = null;
+		}
+		if (typeof alignment != 'string') {
+			offsets = position;
+			position = zIndex;
+			zIndex = item;
+			item = series;
+			series = alignment;
+			alignment = null;
+		}
+		var data = image + ',' + (colourSeries || 0) + ',' + this.color(colourLow || 'green') + ',' +
+			this.color(colourMiddle || 'yellow') + ',' + this.color(colourHigh || 'red') + ',' +
+			(sizeSeries || 0) + ',' + (zeroSize || 4) + ',' + (sizeMultiplier || 10) + ',' + (minSize || 4) + ',' +
+			this.color(outline || 'black') + ',' + (alignment || 'hb-0-0');
+		return this.icon('cm_color_size', data, series, item, zIndex, position, offsets);
+	},
+
+	/* Create a stacking icon definition.
+	   @param  image           (string) the name of the icon to use
+	   @param  repeatSeries    (number) the series from which repeat data is taken
+	   @param  scalingFactor   (number, optional) the data value scaling factor (default 10)
+	   @param  horizontal      (boolean, optional) true if stacking horizontally (default false)
+	   @param  size            (number, optional) the icons' size - 12, 16, 24 (default 12)
+	   @param  colour          (string, optional) the icons' fill colour (default '#88f88')
+	   @param  outline         (string, optional) the icons' outline colour (default 'black')
+	   @param  spacing         (number, optional) spacing between icons in pixels (default 0)
+	   @param  alignment       (string, optional) result of contextualAlignment(...) (default 'hb')
+	   @param  series          (number) the series to which the icon applies
+	   @param  item            (number or string or number[2 or 3], optional)
+	                           the item in the series to which it applies or 'all' (default)
+	                           or 'everyn' or [start, end, every]
+	   @param  zIndex          (number, optional) the z-index (-1.0 to 1.0)
+	   @param  position        (number[2], optional) an absolute chart position (0.0 to 1.0)
+	   @param  offsets         (number[2], optional) pixel offsets
+	   @return  (object) the icon definition */
+	stackingIcon: function(image, repeatSeries, scalingFactor, horizontal, size, colour, outline,
+			spacing, alignment, series, item, zIndex, position, offsets) {
+		if (typeof scalingFactor != 'number') {
+			offsets = position;
+			position = zIndex;
+			zIndex = item;
+			item = series;
+			series = alignment;
+			alignment = spacing;
+			spacing = outline;
+			outline = colour;
+			colour = size;
+			size = horizontal;
+			horizontal = scalingFactor;
+			scalingFactor = null;
+		}
+		if (typeof horizontal != 'boolean') {
+			offsets = position;
+			position = zIndex;
+			zIndex = item;
+			item = series;
+			series = alignment;
+			alignment = spacing;
+			spacing = outline;
+			outline = colour;
+			colour = size;
+			size = horizontal;
+			horizontal = null;
+		}
+		if (typeof size != 'number') {
+			offsets = position;
+			position = zIndex;
+			zIndex = item;
+			item = series;
+			series = alignment;
+			alignment = spacing;
+			spacing = outline;
+			outline = colour;
+			colour = size;
+			size = null;
+		}
+		if (typeof colour != 'string') {
+			offsets = position;
+			position = zIndex;
+			zIndex = item;
+			item = series;
+			series = alignment;
+			alignment = spacing;
+			spacing = outline;
+			outline = colour;
+			colour = null;
+		}
+		if (typeof outline != 'string') {
+			offsets = position;
+			position = zIndex;
+			zIndex = item;
+			item = series;
+			series = alignment;
+			alignment = spacing;
+			spacing = outline;
+			outline = null;
+		}
+		if (typeof spacing != 'number') {
+			offsets = position;
+			position = zIndex;
+			zIndex = item;
+			item = series;
+			series = alignment;
+			alignment = spacing;
+			spacing = null;
+		}
+		if (typeof alignment != 'string') {
+			offsets = position;
+			position = zIndex;
+			zIndex = item;
+			item = series;
+			series = alignment;
+			alignment = null;
+		}
+		var data = image + ',' + (repeatSeries || 0) + ',' + (scalingFactor || 10) + ',' +
+			(horizontal ? 'h' : 'V') + ',' + (SIZES[size] || 12) + ',' + this.color(colour || '#88ff88') + ',' +
+			this.color(outline || 'black') + ',' + (spacing || 0) + ',' + (alignment || 'hb-0-0');
+		return this.icon('cm_repeat', data, series, item, zIndex, position, offsets);
+	},
+
+	/* Create a stacking with colour varying icon definition.
+	   @param  image           (string) the name of the icon to use
+	   @param  repeatSeries    (number) the series from which repeat data is taken
+	   @param  scalingFactor   (number, optional) the data value scaling factor (default 10)
+	   @param  horizontal      (boolean, optional) true if stacking horizontally (default false)
+	   @param  size            (number, optional) the icons' size - 12, 16, 24 (default 12)
+	   @param  colourSeries    (number) the series from which colour data is taken
+	   @param  colourLow       (string[3] or string) the icons' fill colour(s) (default 'green')
+	   @param  colourMiddle    (string, optional) the icons' middle fill colour (default 'yellow')
+	   @param  colourHigh      (string, optional) the icons' high fill colour (default 'red')
+	   @param  outline         (string, optional) the icons' outline colour (default 'black')
+	   @param  spacing         (number, optional) spacing between icons in pixels (default 0)
+	   @param  alignment       (string, optional) result of contextualAlignment(...) (default 'hb')
+	   @param  series          (number) the series to which the icon applies
+	   @param  item            (number or string or number[2 or 3], optional)
+	                           the item in the series to which it applies or 'all' (default)
+	                           or 'everyn' or [start, end, every]
+	   @param  zIndex          (number, optional) the z-index (-1.0 to 1.0)
+	   @param  position        (number[2], optional) an absolute chart position (0.0 to 1.0)
+	   @param  offsets         (number[2], optional) pixel offsets
+	   @return  (object) the icon definition */
+	stackingColourVaryIcon: function(image, repeatSeries, scalingFactor, horizontal, size,
+			colourSeries, colourLow, colourMiddle, colourHigh, outline,
+			spacing, alignment, series, item, zIndex, position, offsets) {
+		if (typeof scalingFactor != 'number') {
+			offsets = position;
+			position = zIndex;
+			zIndex = item;
+			item = series;
+			series = alignment;
+			alignment = spacing;
+			spacing = outline;
+			outline = colourHigh;
+			colourHigh = colourMiddle;
+			colourMiddle = colourLow;
+			colourLow = colourSeries;
+			colourSeries = size;
+			size = horizontal;
+			horizontal = scalingFactor;
+			scalingFactor = null;
+		}
+		if (typeof horizontal != 'boolean') {
+			offsets = position;
+			position = zIndex;
+			zIndex = item;
+			item = series;
+			series = alignment;
+			alignment = spacing;
+			spacing = outline;
+			outline = colourHigh;
+			colourHigh = colourMiddle;
+			colourMiddle = colourLow;
+			colourLow = colourSeries;
+			colourSeries = size;
+			size = horizontal;
+			horizontal = null;
+		}
+		if (typeof size != 'number') {
+			offsets = position;
+			position = zIndex;
+			zIndex = item;
+			item = series;
+			series = alignment;
+			alignment = spacing;
+			spacing = outline;
+			outline = colourHigh;
+			colourHigh = colourMiddle;
+			colourMiddle = colourLow;
+			colourLow = colourSeries;
+			colourSeries = size;
+			size = null;
+		}
+		if ($.isArray(colourLow)) {
+			offsets = zIndex;
+			position = item;
+			zIndex = series;
+			item = alignment;
+			series = spacing;
+			alignment = outline;
+			spacing = colourHigh;
+			outline = colourMiddle;
+			colourHigh = colourLow[2];
+			colourMiddle = colourLow[1];
+			colourLow = colourLow[0];
+		}
+		else if (typeof colourLow != 'string') {
+			offsets = position;
+			position = zIndex;
+			zIndex = item;
+			item = series;
+			series = alignment;
+			alignment = spacing;
+			spacing = outline;
+			outline = colourHigh;
+			colourHigh = colourMiddle;
+			colourMiddle = colourLow;
+			colourLow = null;
+		}
+		if (typeof colourMiddle != 'string') {
+			offsets = position;
+			position = zIndex;
+			zIndex = item;
+			item = series;
+			series = alignment;
+			alignment = spacing;
+			spacing = outline;
+			outline = colourHigh;
+			colourHigh = colourMiddle;
+			colourMiddle = null;
+		}
+		if (typeof colourHigh != 'string') {
+			offsets = position;
+			position = zIndex;
+			zIndex = item;
+			item = series;
+			series = alignment;
+			alignment = spacing;
+			spacing = outline;
+			outline = colourHigh;
+			colourHigh = null;
+		}
+		if (typeof outline != 'string') {
+			offsets = position;
+			position = zIndex;
+			zIndex = item;
+			item = series;
+			series = alignment;
+			alignment = spacing;
+			spacing = outline;
+			outline = null;
+		}
+		if (typeof spacing != 'number') {
+			offsets = position;
+			position = zIndex;
+			zIndex = item;
+			item = series;
+			series = alignment;
+			alignment = spacing;
+			spacing = null;
+		}
+		if (typeof alignment != 'string') {
+			offsets = position;
+			position = zIndex;
+			zIndex = item;
+			item = series;
+			series = alignment;
+			alignment = null;
+		}
+		var data = image + ',' + (repeatSeries || 0) + ',' + (scalingFactor || 10) + ',' +
+			(horizontal ? 'h' : 'V') + ',' + (SIZES[size] || 12) + ',' + (colourSeries || 0) + ',' +
+			this.color(colourLow || 'green') + ',' + this.color(colourMiddle || 'yellow') + ',' +
+			this.color(colourHigh || 'red') + ',' + this.color(outline || 'black') + ',' +
+			(spacing || 0) + ',' + (alignment || 'hb-0-0');
+		return this.icon('cm_repeat_color', data, series, item, zIndex, position, offsets);
+	},
+
+	/* Generate a contextual alignment value.
+	   @param  position  (string) the anchor point, e.g. 'topLeft', 'center', ...
+	   @param  hOffset   (number, optional) a horizontal offset (pixels)
+	   @param  vOffset   (number, optional) a vertical offset (pixels)
+	   @return  (string) the alignment property */
+	contextualAlignment: function(position, hOffset, vOffset) {
+		hOffset = hOffset || 0;
+		vOffset = vOffset || 0;
+		return (ALIGNMENTS[position] || 'hv') +
+			(hOffset == 0 ? '-0' : (hOffset > 0 ? '%20' + hOffset : hOffset)) +
+			(vOffset == 0 ? '-0' : (vOffset > 0 ? '%20' + vOffset : vOffset));
+	},
+
 	/* Generate dynamic icon parameters.
 	   @param  type     (string) the encoded chart type
 	   @param  options  (object) the current instance settings
 	   @return  (string) the icons parameters */
 	addIcons: function(type, options) {
-		var icons = '';
 		var decodeItem = function(item) {
 			if (item == 'all') {
 				return item;
@@ -495,15 +1141,22 @@ $.extend($.gchart._prototype.prototype, {
 			}
 			return item;
 		};
+		var icons = '';
+		var freeIcon = '';
 		for (var i = 0; i < options.icons.length; i++) {
 			var icon = options.icons[i];
-			icons += '|y;s=' + icon.name + ';d=' + icon.data +
-				(icon.position ? '' : ';ds=' + icon.series + ';dp=' + decodeItem(icon.item)) +
-				(icon.zIndex ? ';py=' + icon.zIndex : '') + 
-				(icon.position ? ';po=' + icon.position.join(',') : '') + 
-				(icon.offsets ? ';of=' + icon.offsets.join(',') : '');
+			if (icon.series == -1) {
+				freeIcon = '&chst=d_' + icon.name + '&chld=' + icon.data.replace(/,/g, '|');
+			}
+			else {
+				icons += '|y;s=' + icon.name + ';d=' + icon.data +
+					(icon.position ? '' : ';ds=' + icon.series + ';dp=' + decodeItem(icon.item)) +
+					(icon.zIndex ? ';py=' + icon.zIndex : '') + 
+					(icon.position ? ';po=' + icon.position.join(',') : '') + 
+					(icon.offsets ? ';of=' + icon.offsets.join(',') : '');
+			}
 		}
-		return (icons ? '&chem=' + icons.substr(1) : '');
+		return (icons ? '&chem=' + icons.substr(1) : '') + freeIcon;
 	},
 
 	/* Escape reserved characters in icon text.
@@ -512,6 +1165,12 @@ $.extend($.gchart._prototype.prototype, {
 	_escapeIconText: function(value) {
 		return value.replace(/([@=,;])/g, '@$1').replace(/\|/g, ',');
 	}
+});
+
+$.extend($.gchart._prototype.prototype, {
+	colorVaryIcon: $.gchart._prototype.prototype.colourVaryIcon,
+	colorSizeVaryIcon: $.gchart._prototype.prototype.colourSizeVaryIcon,
+	stackingColorVaryIcon: $.gchart._prototype.prototype.stackingColourVaryIcon
 });
 
 })(jQuery);

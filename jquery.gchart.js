@@ -1,5 +1,5 @@
 /* http://keith-wood.name/gChart.html
-   Google Chart interface for jQuery v1.4.1.
+   Google Chart interface for jQuery v1.4.2.
    See API details at http://code.google.com/apis/chart/.
    Written by Keith Wood (kbwood{at}iinet.com.au) September 2008.
    Dual licensed under the GPL (http://dev.jquery.com/browser/trunk/jquery/GPL-LICENSE.txt) and 
@@ -427,21 +427,22 @@ $.extend(GChart.prototype, {
 	},
 
 	/* Create a simple linear gradient definition for a background.
-	   @param  angle    (string or number) the angle of the gradient from positive x-axis
-	   @param  colour1  (string[]) an array of colours or
-	                    (string) the starting colour
-	   @param  colour2  (string, optional) the ending colour
+	   @param  angle      (string or number) the angle of the gradient from positive x-axis
+	   @param  colours    (string[]) an array of colours or
+	                      (string) the starting colour
+	   @param  positions  (number[], optional) the positions (0.0 to 1.0) of the gradient colours or
+	                      (string, optional) the ending colour
 	   @return  (object) the gradient definition */
-	gradient: function(angle, colour1, colour2) {
+	gradient: function(angle, colours, positions) {
 		var colourPoints = [];
-		if ($.isArray(colour1)) {
-			var step = 1 / (colour1.length - 1);
-			for (var i = 0; i < colour1.length; i++) {
-				colourPoints.push([colour1[i], Math.round(i * step * 100) / 100]);
+		if ($.isArray(colours)) {
+			var step = 1 / (colours.length - 1);
+			for (var i = 0; i < colours.length; i++) {
+				colourPoints.push([colours[i], (positions ? positions[i] : Math.round(i * step * 100) / 100)]);
 			}
 		}
 		else {
-			colourPoints = [[colour1, 0], [colour2, 1]];
+			colourPoints = [[colours, 0], [positions, 1]];
 		}
 		return {angle: angle, colorPoints: colourPoints};
 	},
@@ -449,12 +450,13 @@ $.extend(GChart.prototype, {
 	/* Create a colour striping definition for a background.
 	   @param  angle    (string or number) the angle of the stripes from positive x-axis
 	   @param  colours  (string[]) the colours to stripe
+	   @param  widths   (number[], optional) the widths (0.0 to 1.0) of the stripes
 	   @return  (object) the stripe definition */
-	stripe: function(angle, colours) {
+	stripe: function(angle, colours, widths) {
 		var colourPoints = [];
-		var width = Math.round(100 / colours.length) / 100;
+		var avgWidth = Math.round(100 / colours.length) / 100;
 		for (var i = 0; i < colours.length; i++) {
-			colourPoints.push([colours[i], width]);
+			colourPoints.push([colours[i], (widths ? widths[i] : avgWidth)]);
 		}
 		return {angle: angle, striped: true, colorPoints: colourPoints};
 	},
@@ -911,17 +913,20 @@ $.extend(GChart.prototype, {
 				return area + ',s,' + $.gchart.color(background);
 			}
 			var bg = area + ',l' + (background.striped ? 's' : 'g') + ',' +
-				(GRADIENTS[background.angle] != null ?
-				GRADIENTS[background.angle] : background.angle);
+				(GRADIENTS[background.angle] != null ? GRADIENTS[background.angle] : background.angle);
 			for (var i = 0; i < background.colorPoints.length; i++) {
 				bg += ',' + $.gchart.color(background.colorPoints[i][0]) +
 					',' + background.colorPoints[i][1];
 			}
 			return bg;
 		};
-		var backgrounds = addBackground('|a', opacity) +
-			addBackground('|bg', options.backgroundColor) +
+		var backgrounds = addBackground('|a', opacity) + addBackground('|bg', options.backgroundColor) +
 			addBackground('|c', options.chartColor);
+		for (var i = 0; i < options.series.length; i++) {
+			if (options.series[i].fillColor && options.series[i].fillColor.colorPoints) {
+				backgrounds += addBackground('|b' + i, options.series[i].fillColor);
+			}
+		}
 		return (backgrounds ? '&chf=' + backgrounds.substr(1) : '');
 	},
 
@@ -1096,7 +1101,7 @@ $.extend(GChart.prototype, {
 				(options.ranges[i].end || options.ranges[i].start + 0.005);
 		}
 		for (var i = 0; i < options.series.length; i++) {
-			if (options.series[i].fillColor) {
+			if (options.series[i].fillColor && !options.series[i].fillColor.colorPoints) {
 				var fills = ($.isArray(options.series[i].fillColor) ?
 					options.series[i].fillColor : [options.series[i].fillColor]);
 				for (var j = 0; j < fills.length; j++) {
