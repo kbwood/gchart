@@ -1,5 +1,5 @@
 /* http://keith-wood.name/gChart.html
-   Google Chart interface for jQuery v1.0.0.
+   Google Chart interface for jQuery v1.1.0.
    See API details at http://code.google.com/apis/chart/.
    Written by Keith Wood (kbwood@virginbroadband.com.au) September 2008.
    Dual licensed under the GPL (http://dev.jquery.com/browser/trunk/jquery/GPL-LICENSE.txt) and 
@@ -31,13 +31,16 @@ function GChart() {
 		dataLabels: [], // Labels for the values across all the series
 		axes: [], // Definitions for the various axes, each entry is either
 			// a string of the axis name or an object with
-			// axis (x, y, top, left, bottom, right), labels (string[]),
-			// positions (number[], optional), and range (number[2], optional) attributes
+			// axis (x, y, top, left, bottom, right), labels (string[], optional),
+			// positions (number[], optional), and range (number[2], optional),
+			// color (string, optional), alignment (string, optional),
+			// and size (number, optional) attributes
 		ranges: [], // Definitions of ranges for the chart, each entry is an object with
 			// vertical (boolean), color (string), start (number, 0-1),
 			// and end (number, 0-1) attributes
 		markers: [], // Definitions of markers for the chart, each entry is an object with
-			// shape (arrow, circle, cross, diamond, down, horizontal, plus, square, text, vertical),
+			// shape (arrow, circle, cross, diamond, down, horizontal,
+			// plus, sparkfill, sparkline, square, text, vertical),
 			// color (string), series (number), item (number), size (number),
 			// priority (number), text (string)
 		minValue: 0, // The minimum value of the data, $.gchart.calculate to calculate from data
@@ -75,8 +78,8 @@ var CHART_TYPES = {line: 'lc', lineXY: 'lxy', sparkline: 'ls',
 	pie: 'p', pie3D: 'p3', venn: 'v', scatter: 's',
 	radar: 'r', radarCurved: 'rs', map: 't', meter: 'gom', qrCode: 'qr'};
 /* Mapping from plugin shape types to Google chart shapes. */
-var SHAPES = {arrow: 'a', circle: 'o', cross: 'x', diamond: 'd', down: 'v',
-	horizontal: 'h', plus: 'c', square: 's', text: 't', vertical: 'V'};
+var SHAPES = {arrow: 'a', circle: 'o', cross: 'x', diamond: 'd', down: 'v', horizontal: 'h',
+	plus: 'c', sparkfill: 'B', sparkline: 'D', square: 's', text: 't', vertical: 'V'};
 /* Mapping from plugin priority names to chart priority codes. */
 var PRIORITIES = {behind: -1, normal: 0, above: 1};
 /* Mapping from plugin gradient names to angles. */
@@ -130,7 +133,7 @@ $.extend(GChart.prototype, {
 			fillColour = null;
 			colour = null;
 		}
-		else if (typeof fillColour != 'string') { // Optional fillColour
+		else if (fillColour && typeof fillColour != 'string') { // Optional fillColour
 			segments = thickness;
 			thickness = maxValue;
 			maxValue = minValue;
@@ -144,33 +147,161 @@ $.extend(GChart.prototype, {
 			minValue = null;
 		}
 		return {label: label, data: data || [], color: colour || '',
-			fillColor: fillColour || '', minValue: minValue, maxValue: maxValue,
+			fillColor: fillColour, minValue: minValue, maxValue: maxValue,
 			lineThickness: thickness, lineSegments: segments};
+	},
+
+	/* Load series data from CSV.
+	   Include a header row if fields other than data required.
+	   Use these names - label, color, fillColor, minValue, maxValue,
+	   lineThickness, lineSegmentLine, lineSegmentGap - for series attributes.
+	   Data columns should be labelled ynn, where nn is a sequential number.
+	   For X-Y line charts, include xnn columns before corresponding ynn.
+	   @param  csv  (string or string[]) the series data in CSV format
+	   @return  (object[]) the series definitions */
+	seriesFromCsv: function(csv) {
+		var seriesData = [];
+		if (!isArray(csv)) {
+			csv = csv.split('\n');
+		}
+		if (!csv.length) {
+			return seriesData;
+		}
+		var xyData = false;
+		var sColumns = [];
+		var xColumns = [];
+		var fields = ['label', 'color', 'fillColor', 'minValue', 'maxValue',
+			'lineThickness', 'lineSegmentLine', 'lineSegmentGap'];
+		$.each(csv, function(i, line) {
+			var cols = line.split(',');
+			if (i == 0 && isNaN(parseFloat(cols[0]))) { // Header row
+				$.each(cols, function(i, val) {
+					if ($.inArray(val, fields) > -1) { // Note the positions of the columns
+						sColumns[i] = val;
+					}
+					else if (val.match(/^x\d+$/)) { // Column with x-coordinate
+						xColumns[i] = val;
+					}
+				});
+			}
+			else {
+				var series = {};
+				var data = [];
+				var saveX = null;
+				$.each(cols, function(i, val) {
+					if (sColumns[i]) { // Non-data value
+						var pos = $.inArray(sColumns[i], fields);
+						series[sColumns[i]] = (pos > 2 ? $.gchart._numeric(val, 0) : val);
+					}
+					else if (xColumns[i]) { // X-coordinate
+						saveX = (val ? $.gchart._numeric(val, -1) : null);
+						xyData = true;
+					}
+					else {
+						var y = $.gchart._numeric(val, -1);
+						data.push(saveX != null ? [saveX, y] : y);
+						saveX = null;
+					}
+				});
+				if (series.lineSegmentLine != null && series.lineSegmentGap != null) {
+					series.lineSegments = [series.lineSegmentLine, series.lineSegmentGap];
+					series.lineSegmentLine = series.lineSegmentGap = null;
+				}
+				seriesData.push($.extend(series, {data: data}));
+			}
+		});
+		return (xyData ? this.seriesForXYLines(seriesData) : seriesData);
+	},
+
+	/* Load series data from XML. All attributes are optional except point/@y.
+	   <data>
+	     <series label="" color="" fillColor="" minValue="" maxValue="" lineThickness="" lineSegments="">
+	       <point x="" y=""/>
+	       ...
+	     </series>
+	     ...
+	   </data>
+	   @param  xml  (string or Document) the XML containing the series data
+	   @return  (object[]) the series definitions */
+	seriesFromXml: function(xml) {
+		if ($.browser.msie && typeof xml == 'string') {
+			var doc = new ActiveXObject('Microsoft.XMLDOM');
+			doc.validateOnParse = false;
+			doc.resolveExternals = false;
+			doc.loadXML(xml);
+			xml = doc;
+		}
+		xml = $(xml);
+		var seriesData = [];
+		var xyData = false;
+		xml.find('series').each(function() {
+			var series = $(this);
+			var data = [];
+			series.find('point').each(function() {
+				var point = $(this);
+				var x = point.attr('x');
+				if (x != null) {
+					xyData = true;
+					x = $.gchart._numeric(x, -1);
+				}
+				y = $.gchart._numeric(point.attr('y'), -1);
+				data.push(x ? [x, y] : y);
+			});
+			var segments = series.attr('lineSegments');
+			if (segments) {
+				segments = segments.split(',');
+			}
+			seriesData.push({label: series.attr('label'), data: data,
+				color: series.attr('color'), fillColor: series.attr('fillColor'),
+				minValue: series.attr('minValue'), maxValue: series.attr('maxValue'),
+				lineThickness: series.attr('lineThickness'), lineSegments: segments});
+		});
+		return (xyData ? this.seriesForXYLines(seriesData) : seriesData);
+	},
+
+	/* Force a value to be numeric.
+	   @param  val      (string) the value to convert
+	   @param  whenNaN  (number) value to use if not numeric
+	   @return  (number) the numeric equivalent or whenNaN if not numeric */
+	_numeric: function(val, whenNaN) {
+		val = parseFloat(val);
+		return (isNaN(val) ? whenNaN : val);
+	},
+
+	/* Prepare series for a line XY chart.
+	   @param  series  (object[]) the details of the points to plot,
+	                   each data value may be an array of two points
+	   @return  (object[]) the transformed series
+	   @deprecated  in favour of seriesForXYLines */
+	lineXYSeries: function(series) {
+		return this.seriesForXYLines(series);
 	},
 
 	/* Prepare series for a line XY chart.
 	   @param  series  (object[]) the details of the points to plot,
 	                   each data value may be an array of two points
 	   @return  (object[]) the transformed series */
-	lineXYSeries: function(series) {
+	seriesForXYLines: function(series) {
 		var xySeries = [];
 		for (var i = 0; i < series.length; i++) {
 			var xNull = !isArray(series[i].data[0]);
-			var x = (xNull ? [null] : []);
-			var y = [];
+			var xData = (xNull ? [null] : []);
+			var yData = [];
 			for (var j = 0; j < series[i].data.length; j++) {
 				if (xNull) {
-					y[y.length] = series[i].data[j];
+					yData[yData.length] = series[i].data[j];
 				}
 				else {
-					x[x.length] = series[i].data[j][0];
-					y[y.length] = series[i].data[j][1];
+					xData[xData.length] = series[i].data[j][0];
+					yData[yData.length] = series[i].data[j][1];
 				}
 			}
-			xySeries[i * 2] = $.gchart.series(series[i].label,
-				x, series[i].color, series[i].minValue, series[i].maxValue);
-			xySeries[i * 2 + 1] = $.gchart.series(series[i].label,
-				y, '', series[i].minValue, series[i].maxValue);
+			xySeries.push($.gchart.series(series[i].label, xData, series[i].color,
+				series[i].fillColor, series[i].minValue, series[i].maxValue,
+				series[i].lineThickness, series[i].lineSegments));
+			xySeries.push($.gchart.series(series[i].label, yData, '',
+				series[i].fillColor, series[i].minValue, series[i].maxValue,
+				series[i].lineThickness, series[i].lineSegments));
 		}
 		return xySeries;
 	},
@@ -493,7 +624,7 @@ $.extend(GChart.prototype, {
 		for (var i = 0; i < options.series.length; i++) {
 			legends += '|' + (options.series[i].label || '');
 			if (type != 'lxy' || i % 2 == 0) {
-				colours += ',' + this.color(options.series[i].color);
+				colours += ',' + this.color(options.series[i].color || '');
 			}
 			if (type.substr(0, 1) == 'l' && options.series[i].lineThickness &&
 					isArray(options.series[i].lineSegments)) {
@@ -510,22 +641,22 @@ $.extend(GChart.prototype, {
 			if (type != 't' && options.width * options.height > 300000) {
 				options.height = Math.floor(300000 / options.width);
 			}
-			return (type != 't' ? '&chs=' + options.width + 'x' + options.height :
-				'&chs=' + Math.min(440, options.width) + 'x' + Math.min(220, options.height));
+			return (type != 't' ? '&amp;chs=' + options.width + 'x' + options.height :
+				'&amp;chs=' + Math.min(440, options.width) + 'x' + Math.min(220, options.height));
 		};
 		var qrOptions = function() {
-			return include('&choe=', options.encoding) +
+			return include('&amp;choe=', options.encoding) +
 				(options.qrECLevel || options.qrMargin ?
-				'&chld=' + (options.qrECLevel ? options.qrECLevel.charAt(0) : 'l') +
+				'&amp;chld=' + (options.qrECLevel ? options.qrECLevel.charAt(0) : 'l') +
 				(options.qrMargin != null ? '|' + options.qrMargin : '') : '') +
-				(labels ? '&chl=' + labels.substr(1) : '');
+				(labels ? '&amp;chl=' + labels.substr(1) : '');
 		};
 		var mapOptions = function() {
-			return '&chtm=' + (options.mapArea || 'world') +
-				'&chd=' + encoding.apply($.gchart, [options]) +
+			return '&amp;chtm=' + (options.mapArea || 'world') +
+				'&amp;chd=' + encoding.apply($.gchart, [options]) +
 				(options.mapRegions && options.mapRegions.length ?
-				'&chld=' + options.mapRegions.join('') : '') +
-				'&chco=' + $.gchart.color(options.mapDefaultColor) + ',' +
+				'&amp;chld=' + options.mapRegions.join('') : '') +
+				'&amp;chco=' + $.gchart.color(options.mapDefaultColor) + ',' +
 				$.gchart.color(options.mapColors[0] || 'aaffaa') + ',' +
 				$.gchart.color(options.mapColors[1] || 'green');
 		};
@@ -542,30 +673,30 @@ $.extend(GChart.prototype, {
 			}
 			var data = encoding.apply($.gchart, [options]);
 			options.series = series;
-			return '&chd=' + data + (labels ? '&chl=' + labels.substr(1) :
-				(pieLabels ? '&chl=' + pieLabels.substr(1) : ''));
+			return '&amp;chd=' + data + (labels ? '&amp;chl=' + labels.substr(1) :
+				(pieLabels ? '&amp;chl=' + pieLabels.substr(1) : ''));
 		};
 		var standardOptions = function() {
-			return '&chd=' + encoding.apply($.gchart, [options]) +
-				(labels ? '&chl=' + labels.substr(1) : '');
+			return '&amp;chd=' + encoding.apply($.gchart, [options]) +
+				(labels ? '&amp;chl=' + labels.substr(1) : '');
 		};
 		var addBarSizings = function() {
 			return (type.substr(0, 1) != 'b' ? '' : (options.barWidth == null ? '' :
-				'&chbh=' + options.barWidth +
+				'&amp;chbh=' + options.barWidth +
 				(options.barSpacing == null ? '' : ',' + options.barSpacing +
 				(options.barGroupSpacing == null ? '' : ',' + options.barGroupSpacing))) +
-				(options.barZeroPoint == null ? '' : '&chp=' + options.barZeroPoint));
+				(options.barZeroPoint == null ? '' : '&amp;chp=' + options.barZeroPoint));
 		};
 		var addLineStyles = function() {
-			return (type.charAt(0) == 'l' && lines ? '&chls=' + lines.substr(1) : '');
+			return (type.charAt(0) == 'l' && lines ? '&amp;chls=' + lines.substr(1) : '');
 		};
 		var addColours = function() {
-			return (colours.length > options.series.length ? '&chco=' + colours.substr(1) : '');
+			return (colours.length > options.series.length ? '&amp;chco=' + colours.substr(1) : '');
 		};
 		var addTitle = function() {
-			return include('&chtt=', escape(options.title)) +
+			return include('&amp;chtt=', escape(options.title)) +
 			(options.titleColor || options.titleSize ?
-			'&chts=' + $.gchart.color(options.titleColor) + ',' +
+			'&amp;chts=' + $.gchart.color(options.titleColor) + ',' +
 			(options.titleSize || 20) : '');
 		};
 		var addAxes = function() {
@@ -604,11 +735,11 @@ $.extend(GChart.prototype, {
 						(ALIGNMENTS[alignment] != null ? ALIGNMENTS[alignment] : alignment);
 				}
 			}
-			return (!axes ? '' : '&chxt=' + axes.substr(1) +
-				(!axesLabels ? '' : '&chxl=' + axesLabels.substr(1)) +
-				(!axesPositions ? '' : '&chxp=' + axesPositions.substr(1)) +
-				(!axesRanges ? '' : '&chxr=' + axesRanges.substr(1)) +
-				(!axesStyles ? '' : '&chxs=' + axesStyles.substr(1)));
+			return (!axes ? '' : '&amp;chxt=' + axes.substr(1) +
+				(!axesLabels ? '' : '&amp;chxl=' + axesLabels.substr(1)) +
+				(!axesPositions ? '' : '&amp;chxp=' + axesPositions.substr(1)) +
+				(!axesRanges ? '' : '&amp;chxr=' + axesRanges.substr(1)) +
+				(!axesStyles ? '' : '&amp;chxs=' + axesStyles.substr(1)));
 		};
 		var addBackground = function(area, background) {
 			if (background == null) {
@@ -629,11 +760,11 @@ $.extend(GChart.prototype, {
 		var addBackgrounds = function() {
 			var backgrounds = addBackground('|bg', options.backgroundColor) +
 				addBackground('|c', options.chartColor);
-			return (backgrounds ? '&chf=' + backgrounds.substr(1) : '');
+			return (backgrounds ? '&amp;chf=' + backgrounds.substr(1) : '');
 		};
 		var addGrids = function() {
 			return (options.gridSize.length == 0 ? '' :
-				'&chg=' + options.gridSize[0] + ',' + options.gridSize[1] +
+				'&amp;chg=' + options.gridSize[0] + ',' + options.gridSize[1] +
 				(options.gridLine.length == 0 ? '' :
 				',' + options.gridLine[0] + ',' + options.gridLine[1]));
 		};
@@ -660,16 +791,16 @@ $.extend(GChart.prototype, {
 					'|b,' + $.gchart.color(options.series[i].fillColor) +
 					',' + i + ',' + (i + 1) + ',0');
 			}
-			return (markers ? '&chm=' + markers.substr(1) : '');
+			return (markers ? '&amp;chm=' + markers.substr(1) : '');
 		};
 		var addLegends = function() {
 			return (!options.legend || legends.length <= options.series.length ? '' :
-				'&chdl=' + legends.substr(1) + include('&chdlp=', options.legend.charAt(0)));
+				'&amp;chdl=' + legends.substr(1) + include('&amp;chdlp=', options.legend.charAt(0)));
 		};
 		var addExtensions = function() {
 			var params = '';
 			for (var name in options.extension) {
-				params += '&' + name + '=' + escape(options.extension[name]);
+				params += '&amp;' + name + '=' + escape(options.extension[name]);
 			}
 			return params;
 		};
@@ -730,7 +861,7 @@ $.extend(GChart.prototype, {
 				',' + (options.series[i].maxValue != null ?
 				options.series[i].maxValue : maxValue);
 		}
-		return 't:' + data.substr(1) + '&chds=' + minMax.substr(1);
+		return 't:' + data.substr(1) + '&amp;chds=' + minMax.substr(1);
 	},
 
 	/* Encode values in text format: numeric min to max, comma separated, min - 1 for null
