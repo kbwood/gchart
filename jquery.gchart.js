@@ -1,5 +1,5 @@
 /* http://keith-wood.name/gChart.html
-   Google Chart interface for jQuery v1.2.1.
+   Google Chart interface for jQuery v1.2.2.
    See API details at http://code.google.com/apis/chart/.
    Written by Keith Wood (kbwood{at}iinet.com.au) September 2008.
    Dual licensed under the GPL (http://dev.jquery.com/browser/trunk/jquery/GPL-LICENSE.txt) and 
@@ -694,17 +694,24 @@ $.extend(GChart.prototype, {
 		labels = (labels.length == options.dataLabels.length ? '' : labels);
 		var legends = '';
 		var colours = '';
+		var hasColour = false;
 		var lines = '';
 		for (var i = 0; i < options.series.length; i++) {
 			legends += '|' + encodeURIComponent(options.series[i].label || '');
+			var clrs = '';
 			if (type != 'lxy' || i % 2 == 0) {
 				var sep = ',';
 				$.each((isArray(options.series[i].color) ? options.series[i].color :
 						[options.series[i].color]), function(i, v) {
-					colours += sep + $.gchart.color(v || '');
+					var colour = $.gchart.color(v || '');
+					if (colour) {
+						hasColour = true;
+					}
+					clrs += sep + (colour || '000000');
 					sep = '|';
 				});
 			}
+			colours += (hasColour ? clrs : '');
 			if (type.substr(0, 1) == 'l' && options.series[i].lineThickness &&
 					isArray(options.series[i].lineSegments)) {
 				lines += '|' + options.series[i].lineThickness + ',' +
@@ -777,7 +784,7 @@ $.extend(GChart.prototype, {
 		var addTitle = function() {
 			return include('&chtt=', encodeURIComponent(options.title)) +
 			(options.titleColor || options.titleSize ?
-			'&chts=' + $.gchart.color(options.titleColor) + ',' +
+			'&chts=' + ($.gchart.color(options.titleColor) || '000000') + ',' +
 			(options.titleSize || 20) : '');
 		};
 		var addBackground = function(area, background) {
