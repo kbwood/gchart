@@ -1,5 +1,5 @@
 /* http://keith-wood.name/gChart.html
-   Google Chart interface for jQuery v1.2.2.
+   Google Chart interface for jQuery v1.2.3.
    See API details at http://code.google.com/apis/chart/.
    Written by Keith Wood (kbwood{at}iinet.com.au) September 2008.
    Dual licensed under the GPL (http://dev.jquery.com/browser/trunk/jquery/GPL-LICENSE.txt) and 
@@ -65,7 +65,9 @@ function GChart() {
 		mapColors: ['aaffaa', 'green'], // The colour range for plotted countries/states
 		// QR Code ----------------
 		qrECLevel: null, // Error correction level: low, medium, quarter, high
-		qrMargin: null // Margin (squares) around QR code, default is 4
+		qrMargin: null, // Margin (squares) around QR code, default is 4
+		// Callback
+		onLoad: null // Function to call when loaded
 	};
 };
 
@@ -952,6 +954,9 @@ $.extend(GChart.prototype, {
 		var img = $(new Image()); // Prepare to load chart image in background
 		img.load(function() { // Once loaded...
 			$(target).find('img').remove().end().append(this);
+			if (options.onLoad) {
+				options.onLoad.apply(target, []);
+			}
 		});
 		options._src = this._generateChart(options);
 		$(img).attr('src', options._src);
