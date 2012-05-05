@@ -1,5 +1,5 @@
 /* http://keith-wood.name/gChart.html
-   Google Chart interface for jQuery v1.4.0.
+   Google Chart interface for jQuery v1.4.1.
    See API details at http://code.google.com/apis/chart/.
    Written by Keith Wood (kbwood{at}iinet.com.au) September 2008.
    Dual licensed under the GPL (http://dev.jquery.com/browser/trunk/jquery/GPL-LICENSE.txt) and 
@@ -19,6 +19,7 @@ function GChart() {
 		height: 0, // Height of the chart
 		format: 'png', // Returned format: png, gif
 		usePost: false, // True to POST instead of GET - for larger charts with more data
+		secure: false, // True to access a secure version of Google Charts
 		margins: null, // The minimum margins (pixels) around the chart:
 			// all or [left/right, top/bottom] or [left, right, top, bottom]
 		title: '', // The title of the chart
@@ -30,7 +31,9 @@ function GChart() {
 		legend: '', // The location of the legend: top, topVertical,
 			// bottom, bottomVertical, left, right, or '' for none
 		legendOrder: 'normal', // The order of items within a legend: normal, reverse, automatic
-		legendSize: null, // The minimum size (pixels) of the legend: [width, height]
+		legendDims: null, // The minimum size (pixels) of the legend: [width, height]
+		legendColor: '', // The colour of the legend
+		legendSize: 0, // The font size of the legend
 		type: 'pie3D', // Type of chart requested: line, lineXY, sparkline, barHoriz, barVert,
 			// barHorizGrouped, barVertGrouped, barHorizOverlapped, barVertOverlapped, pie, pie3D (default),
 			// pieConcentric, venn, scatter, radar, radarCurved, map, mapOriginal, meter, qrCode, formula
@@ -579,32 +582,34 @@ $.extend(GChart.prototype, {
 	                       text appearing after the number
 	   @param  precision   (number, optional) the number of decimal places
 	   @param  showX       (boolean, optional) true to show the x-value, false for the y-value
-	   @param  zeroes      (boolean, optional - can only be present if showX is present)
-	                       true to display trailing zeroes
+	   @param  zeroes      (boolean or number, optional - can only be present if showX is present)
+	                       true to display trailing zeroes, number for that many trailing zeroes
 	   @param  separators  (boolean, optional - can only be present if showX and zeroes are present)
 	                       true to display group separators
 	   @return  (string) the format definition */
 	numberFormat: function(type, prefix, suffix, precision, showX, zeroes, separators) {
 		var format = initNumberFormat(type, prefix, suffix, precision, showX, zeroes, separators);
-		return format.prefix + '*' + format.type + format.precision + (format.zeroes ? 'z' : '') +
+		return format.prefix + '*' + format.type + format.precision +
+			(format.zeroes ? (typeof format.zeroes == 'number' ? 'z' + format.zeroes : 'z') : '') +
 			(format.separators ? 's' : '') + (format.showX ? 'x' : '') + '*' + format.suffix;
 	},
 
 	/* Create an axis definition.
 	   @param  axis           (string) the axis position: top, bottom, left, right
+	   @param  lineColour     (string, optional) the axis lines' colour
 	   @param  labels         (string[]) the labels for this axis
 	   @param  positions      (number[], optional) the positions of the labels
 	   @param  rangeStart     (number, optional with next two) start of range
 	   @param  rangeEnd       (number, optional with above) end of range
 	   @param  rangeInterval  (number, optional with above) interval between values in the range
-	   @param  colour         (string, optional) the axis colour
+	   @param  colour         (string, optional) the labels' colour
 	   @param  alignment      (string, optional) the labels' alignment
 	   @param  size           (number, optional) the labels' size
 	   @param  format         (object, optional) the labels' number format options
 	   @return  (object) the axis definition */
-	axis: function(axis, labels, positions, rangeStart,
+	axis: function(axis, lineColour, labels, positions, rangeStart,
 			rangeEnd, rangeInterval, colour, alignment, size, format) {
-		return new GChartAxis(axis, labels, positions, rangeStart,
+		return new GChartAxis(axis, lineColour, labels, positions, rangeStart,
 			rangeEnd, rangeInterval, colour, alignment, size, format);
 	},
 	
@@ -732,8 +737,8 @@ $.extend(GChart.prototype, {
 		}
 		labels = (labels.length == options.dataLabels.length ? '' : labels);
 		var format = options.format || 'png';
-		var img = 'http://chart.apis.google.com/chart?' + this.addSize(type, options) +
-			(format != 'png' ? '&chof=' + format : '') + '&cht=' + type +
+		var img = (options.secure ? 'https://chart.googleapis.com' : 'http://chart.apis.google.com') + '/chart?' +
+			this.addSize(type, options) + (format != 'png' ? '&chof=' + format : '') + '&cht=' + type +
 			this[(this._typeOptions[type.replace(/:.*/, '')] || this._typeOptions['']) +
 			'Options'](options, labels);
 		for (var i = 0; i < this._chartOptions.length; i++) {
@@ -795,8 +800,8 @@ $.extend(GChart.prototype, {
 			(margins.length == 4 ? margins :
 			(margins.length == 2 ? [margins[0], margins[0], margins[1], margins[1]] : null)))));
 		return (!margins ? '' : '&chma=' + margins.join(',') +
-			(!options.legendSize || options.legendSize.length != 2 ? '' :
-			'|' + options.legendSize.join(',')));
+			(!options.legendDims || options.legendDims.length != 2 ? '' :
+			'|' + options.legendDims.join(',')));
 	},
 
 	/* Generate the options for chart data functions.
@@ -885,7 +890,7 @@ $.extend(GChart.prototype, {
 		return $.gchart._include('&chtt=', encodeURIComponent(options.title)) +
 			(options.titleColor || options.titleSize ?
 			'&chts=' + ($.gchart.color(options.titleColor) || '000000') + ',' +
-			(options.titleSize || 20) : '');
+			(options.titleSize || 14) : '');
 	},
 
 	/* Generate the options for chart backgrounds.
@@ -954,7 +959,8 @@ $.extend(GChart.prototype, {
 			(type == 'lxy' && legends.length <= (options.series.length / 2)) ? '' :
 			'&chdl=' + legends.substr(1) + $.gchart._include('&chdlp=',
 			options.legend.charAt(0) + (options.legend.indexOf('V') > -1 ? 'v' : '') +
-			$.gchart._include('|', order)));
+			$.gchart._include('|', order)) + (options.legendColor || options.legendSize ? '&chdls=' +
+			($.gchart.color(options.legendColor) || '000000') + ',' + (options.legendSize || 11) : ''));
 	},
 
 	/* Generate the options for chart extensions.
@@ -981,6 +987,9 @@ $.extend(GChart.prototype, {
 		var axesStyles = '';
 		var axesTicks = '';
 		for (var i = 0; i < options.axes.length; i++) {
+			if (!options.axes[i]) {
+				continue;
+			}
 			var axisDef = (typeof options.axes[i] == 'string' ?
 				new GChartAxis(options.axes[i]) : options.axes[i]);
 			var axis = axisDef.axis().charAt(0);
@@ -1004,20 +1013,21 @@ $.extend(GChart.prototype, {
 				axesRanges += '|' + i + ',' + range[0] + ',' + range[1] +
 					(range[2] ? ',' + range[2] : '');
 			}
-			if (axisDef.style() || axisDef.drawing() || axisDef.ticks() || axisDef.format()) {
+			var ticks = axisDef.ticks() || {};
+			if (axisDef.color() || axisDef.style() || axisDef.drawing() || ticks.color || axisDef.format()) {
 				var style = axisDef.style() || {};
-				var ticks = axisDef.ticks() || {};
 				axesStyles += '|' + i +
 					(axisDef.format() ? 'N' + this.numberFormat(axisDef.format()) : '') + ',' +
 					$.gchart.color(style.color || 'gray') + ',' +
 					(style.size || 10) + ',' + 
-					(ALIGNMENTS[style.alignment] || style.alignment || 0) +
-					(!axisDef.drawing() && !ticks.color ? '' : ',' +
+					(ALIGNMENTS[style.alignment] || style.alignment || 0) + ',' +
 					(DRAWING[axisDef.drawing()] || axisDef.drawing() || 'lt') +
-					(ticks.color ? ',' + $.gchart.color(ticks.color) : ''));
+					(!ticks.color && !axisDef.color() ? '' :
+					',' + (ticks.color ? $.gchart.color(ticks.color) : '808080') +
+					(!axisDef.color() ? '' : ',' + $.gchart.color(axisDef.color())));
 			}
-			if (axisDef.ticks() && axisDef.ticks().length) {
-				axesTicks += '|' + i + ',' + axisDef.ticks().length;
+			if (ticks.length) {
+				axesTicks += '|' + i + ',' + ($.isArray(ticks.length) ? ticks.length.join(',') : ticks.length);
 			}
 		}
 		return (!axes ? '' : '&chxt=' + axes.substr(1) +
@@ -1111,8 +1121,9 @@ $.extend(GChart.prototype, {
 	_updateChart: function(target, options) {
 		options._src = this._generateChart(options);
 		if (options.usePost) {
-			var form = '<form action="http://chart.apis.google.com/chart?' +
-				Math.floor(Math.random() * 1e8) + '" method="POST">';
+			var form = '<form action="' +
+				(options.secure ? 'https://chart.googleapis.com' : 'http://chart.apis.google.com') +
+				'/chart?' + Math.floor(Math.random() * 1e8) + '" method="POST">';
 			var pattern = /(\w+)=([^&]*)/g;
 			var match = pattern.exec(options._src);
 			while (match) {
@@ -1343,17 +1354,30 @@ $.extend(GChart.prototype, {
 
 /* The definition of a chart axis.
    @param  axis           (string) the axis position: top, bottom, left, right
+   @param  lineColour     (string, optional) the axis lines' colour
    @param  labels         (string[]) the labels for this axis
    @param  positions      (number[], optional) the positions of the labels
    @param  rangeStart     (number, optional with next two) start of range
    @param  rangeEnd       (number, optional with above) end of range
    @param  rangeInterval  (number, optional with above) interval between values in the range
-   @param  colour         (string, optional) the axis colour
+   @param  colour         (string, optional) the labels' colour
    @param  alignment      (string, optional) the labels' alignment
    @param  size           (number, optional) the labels' size
    @param  format         (object, optional) the labels' number format options */
-function GChartAxis(axis, labels, positions, rangeStart, rangeEnd, rangeInterval,
+function GChartAxis(axis, lineColour, labels, positions, rangeStart, rangeEnd, rangeInterval,
 		colour, alignment, size, format) {
+	if (typeof lineColour != 'string') { // Optional lineColour
+		format = size;
+		size = alignment;
+		alignment = colour;
+		colour = rangeInterval;
+		rangeInterval = rangeEnd;
+		rangeEnd = rangeStart;
+		rangeStart = positions;
+		positions = labels;
+		labels = lineColour;
+		lineColour = null;
+	}
 	if (typeof labels == 'number') { // Range instead of labels/positions
 		format = alignment;
 		size = colour;
@@ -1397,6 +1421,7 @@ function GChartAxis(axis, labels, positions, rangeStart, rangeEnd, rangeInterval
 		alignment = null;
 	}
 	this._axis = axis;
+	this._lineColor = lineColour;
 	this._labels = labels;
 	this._positions = positions;
 	this._range = (rangeStart != null ? [rangeStart, rangeEnd, rangeInterval || null] : null);
@@ -1422,7 +1447,19 @@ $.extend(GChartAxis.prototype, {
 		this._axis = axis;
 		return this;
 	},
-	
+
+	/* Get/set the axis colour.
+	   @param  lineColour  (string) the axis line colour
+	   @return  (GChartAxis) the axis object or
+	            (string) the axis line colour (if no parameters specified) */
+	color: function(lineColour) {
+		if (arguments.length == 0) {
+			return this._lineColor;
+		}
+		this._lineColor = lineColour;
+		return this;
+	},
+
 	/* Get/set the axis labels.
 	   @param  labels  (string[]) the labels for this axis
 	   @return  (GChartAxis) the axis object or
@@ -1461,8 +1498,8 @@ $.extend(GChartAxis.prototype, {
 		return this;
 	},
 
-	/* Get/set the axis style.
-	   @param  colour     (string) the axis colour
+	/* Get/set the axis labels' style.
+	   @param  colour     (string) the labels' colour
 	   @param  alignment  (string, optional) the labels' alignment
 	   @param  size       (number, optional) the labels' size
 	   @return  (GChartAxis) the axis object or
@@ -1518,8 +1555,8 @@ $.extend(GChartAxis.prototype, {
 	                       text appearing after the number
 	   @param  precision   (number, optional) the number of decimal places
 	   @param  showX       (boolean, optional) true to show the x-value, false for the y-value
-	   @param  zeroes      (boolean, optional - can only be present if showX is present)
-	                       true to display trailing zeroes
+	   @param  zeroes      (boolean or number, optional - can only be present if showX is present)
+	                       true to display trailing zeroes, number for that many trailing zeroes
 	   @param  separators  (boolean, optional - can only be present if showX and zeroes are present)
 	                       true to display group separators
 	   @return  (GChartAxis) the axis object or

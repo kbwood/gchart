@@ -1,5 +1,5 @@
-﻿/* http://keith-wood.name/gChart.html
-   Google Chart interface extensions for jQuery v1.4.0.
+/* http://keith-wood.name/gChart.html
+   Google Chart interface extensions for jQuery v1.4.1.
    See API details at http://code.google.com/apis/chart/.
    Written by Keith Wood (kbwood{at}iinet.com.au) September 2008.
    Dual licensed under the GPL (http://dev.jquery.com/browser/trunk/jquery/GPL-LICENSE.txt) and 
