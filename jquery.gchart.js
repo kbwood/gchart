@@ -1,7 +1,7 @@
 /* http://keith-wood.name/gChart.html
-   Google Chart interface for jQuery v1.2.0.
+   Google Chart interface for jQuery v1.2.1.
    See API details at http://code.google.com/apis/chart/.
-   Written by Keith Wood (kbwood@virginbroadband.com.au) September 2008.
+   Written by Keith Wood (kbwood{at}iinet.com.au) September 2008.
    Dual licensed under the GPL (http://dev.jquery.com/browser/trunk/jquery/GPL-LICENSE.txt) and 
    MIT (http://dev.jquery.com/browser/trunk/jquery/MIT-LICENSE.txt) licenses. 
    Please attribute the author if you use it. */
@@ -680,10 +680,10 @@ $.extend(GChart.prototype, {
 		$.removeData(target[0], PROP_NAME);
 	},
 
-	/* Update the Google charting div with the new settings.
-	   @param  target   (element) the containing division
-	   @param  options  (object) the new settings for this Google chart instance */
-	_updateChart: function(target, options) {
+	/* Generate the Google charting request with the new settings.
+	   @param  options  (object) the new settings for this Google chart instance
+	   @return  (string) the Google chart URL */
+	_generateChart: function(options) {
 		var type = CHART_TYPES[options.type] || 'p3';
 		var encoding = this['_' + options.encoding + 'Encoding'] ||
 			this['_textEncoding'];
@@ -715,13 +715,13 @@ $.extend(GChart.prototype, {
 			return (value ? name + value : '');
 		};
 		var addSize = function() {
-			options.width = Math.min(options.width, 1000);
-			options.height = Math.min(options.height, 1000);
+			options.width = Math.max(10, Math.min(options.width, 1000));
+			options.height = Math.max(10, Math.min(options.height, 1000));
 			if (type != 't' && options.width * options.height > 300000) {
 				options.height = Math.floor(300000 / options.width);
 			}
-			return (type != 't' ? '&amp;chs=' + options.width + 'x' + options.height :
-				'&amp;chs=' + Math.min(440, options.width) + 'x' + Math.min(220, options.height));
+			return (type != 't' ? '&chs=' + options.width + 'x' + options.height :
+				'&chs=' + Math.min(440, options.width) + 'x' + Math.min(220, options.height));
 		};
 		var addMargins = function() {
 			var margins = options.margins;
@@ -730,108 +730,55 @@ $.extend(GChart.prototype, {
 				(!isArray(margins) ? null :
 				(margins.length == 4 ? margins :
 				(margins.length == 2 ? [margins[0], margins[0], margins[1], margins[1]] : null)))));
-			return (!margins ? '' : '&amp;chma=' + margins.join(',') +
+			return (!margins ? '' : '&chma=' + margins.join(',') +
 				(!options.legendSize || options.legendSize.length != 2 ? '' :
 				'|' + options.legendSize.join(',')));
 		};
 		var qrOptions = function() {
-			return include('&amp;choe=', options.encoding) +
+			return include('&choe=', options.encoding) +
 				(options.qrECLevel || options.qrMargin ?
-				'&amp;chld=' + (options.qrECLevel ? options.qrECLevel.charAt(0) : 'l') +
+				'&chld=' + (options.qrECLevel ? options.qrECLevel.charAt(0) : 'l') +
 				(options.qrMargin != null ? '|' + options.qrMargin : '') : '') +
-				(labels ? '&amp;chl=' + labels.substr(1) : '');
+				(labels ? '&chl=' + labels.substr(1) : '');
 		};
 		var mapOptions = function() {
-			return '&amp;chtm=' + (options.mapArea || 'world') +
-				'&amp;chd=' + encoding.apply($.gchart, [options]) +
+			return '&chtm=' + (options.mapArea || 'world') +
+				'&chd=' + encoding.apply($.gchart, [options]) +
 				(options.mapRegions && options.mapRegions.length ?
-				'&amp;chld=' + options.mapRegions.join('') : '') +
-				'&amp;chco=' + $.gchart.color(options.mapDefaultColor) + ',' +
+				'&chld=' + options.mapRegions.join('') : '') +
+				'&chco=' + $.gchart.color(options.mapDefaultColor) + ',' +
 				$.gchart.color(options.mapColors[0] || 'aaffaa') + ',' +
 				$.gchart.color(options.mapColors[1] || 'green');
 		};
 		var pieOptions = function() {
 			return (options.pieOrientation ?
-				'&amp;chp=' + (options.pieOrientation / 180 * Math.PI) : '') +
+				'&chp=' + (options.pieOrientation / 180 * Math.PI) : '') +
 				standardOptions();
 		};
 		var standardOptions = function() {
-			return '&amp;chd=' + encoding.apply($.gchart, [options]) +
-				(labels ? '&amp;chl=' + labels.substr(1) : '');
+			return '&chd=' + encoding.apply($.gchart, [options]) +
+				(labels ? '&chl=' + labels.substr(1) : '');
 		};
 		var addBarSizings = function() {
 			return (type.substr(0, 1) != 'b' ? '' : (options.barWidth == null ? '' :
-				'&amp;chbh=' + options.barWidth +
+				'&chbh=' + options.barWidth +
 				(options.barSpacing == null ? '' : ',' + (options.barWidth == $.gchart.barWidthRelative ?
 				Math.min(Math.max(options.barSpacing, 0.0), 1.0) : options.barSpacing) +
 				(options.barGroupSpacing == null ? '' : ',' + (options.barWidth == $.gchart.barWidthRelative ?
 				Math.min(Math.max(options.barGroupSpacing, 0.0), 1.0) : options.barGroupSpacing)))) +
-				(options.barZeroPoint == null ? '' : '&amp;chp=' + options.barZeroPoint));
+				(options.barZeroPoint == null ? '' : '&chp=' + options.barZeroPoint));
 		};
 		var addLineStyles = function() {
-			return (type.charAt(0) == 'l' && lines ? '&amp;chls=' + lines.substr(1) : '');
+			return (type.charAt(0) == 'l' && lines ? '&chls=' + lines.substr(1) : '');
 		};
 		var addColours = function() {
-			return (colours.length > options.series.length ? '&amp;chco=' + colours.substr(1) : '');
+			return (colours.length > options.series.length ? '&chco=' + colours.substr(1) : '');
 		};
 		var addTitle = function() {
-			return include('&amp;chtt=', encodeURIComponent(options.title)) +
+			return include('&chtt=', encodeURIComponent(options.title)) +
 			(options.titleColor || options.titleSize ?
-			'&amp;chts=' + $.gchart.color(options.titleColor) + ',' +
+			'&chts=' + $.gchart.color(options.titleColor) + ',' +
 			(options.titleSize || 20) : '');
-		};
-		var addAxes = function() {
-			var axes = '';
-			var axesLabels = '';
-			var axesPositions = '';
-			var axesRanges = '';
-			var axesStyles = '';
-			var axesTicks = '';
-			for (var i = 0; i < options.axes.length; i++) {
-				var axisDef = (typeof options.axes[i] == 'string' ?
-					new GChartAxis(options.axes[i]) : options.axes[i]);
-				var axis = axisDef.axis().charAt(0);
-				axes += ',' + (axis == 'b' ? 'x' : (axis == 'l' ? 'y' : axis));
-				if (axisDef.labels()) {
-					var labels = '';
-					for (var j = 0; j < axisDef.labels().length; j++) {
-						labels += '|' + encodeURIComponent(axisDef.labels()[j] || '');
-					}
-					axesLabels += (labels ? '|' + i + ':' + labels : '');
-				}
-				if (axisDef.positions()) {
-					var positions = '';
-					for (var j = 0; j < axisDef.positions().length; j++) {
-						positions += ',' + axisDef.positions()[j];
-					}
-					axesPositions += (positions ? '|' + i + positions : '');
-				}
-				if (axisDef.range()) {
-					var range = axisDef.range();
-					axesRanges += '|' + i + ',' + range[0] + ',' + range[1] +
-						(range[2] ? ',' + range[2] : '');
-				}
-				if (axisDef.style() || axisDef.drawing() || axisDef.ticks()) {
-					var style = axisDef.style() || {};
-					var ticks = axisDef.ticks() || {};
-					axesStyles += '|' + i + ',' +
-						$.gchart.color(style.color || 'gray') + ',' +
-						(style.size || 10) + ',' + 
-						(ALIGNMENTS[style.alignment] || style.alignment || 0) +
-						(!axisDef.drawing() && !ticks.color ? '' : ',' +
-						(DRAWING[axisDef.drawing()] || axisDef.drawing() || 'lt') +
-						(ticks.color ? ',' + $.gchart.color(ticks.color) : ''));
-				}
-				if (axisDef.ticks() && axisDef.ticks().length) {
-					axesTicks += '|' + i + ',' + axisDef.ticks().length;
-				}
-			}
-			return (!axes ? '' : '&amp;chxt=' + axes.substr(1) +
-				(!axesLabels ? '' : '&amp;chxl=' + axesLabels.substr(1)) +
-				(!axesPositions ? '' : '&amp;chxp=' + axesPositions.substr(1)) +
-				(!axesRanges ? '' : '&amp;chxr=' + axesRanges.substr(1)) +
-				(!axesStyles ? '' : '&amp;chxs=' + axesStyles.substr(1)) +
-				(!axesTicks ? '' : '&amp;chxtc=' + axesTicks.substr(1)));
 		};
 		var addBackground = function(area, background) {
 			if (background == null) {
@@ -852,82 +799,155 @@ $.extend(GChart.prototype, {
 		var addBackgrounds = function() {
 			var backgrounds = addBackground('|bg', options.backgroundColor) +
 				addBackground('|c', options.chartColor);
-			return (backgrounds ? '&amp;chf=' + backgrounds.substr(1) : '');
+			return (backgrounds ? '&chf=' + backgrounds.substr(1) : '');
 		};
 		var addGrids = function() {
 			return (options.gridSize.length == 0 ? '' :
-				'&amp;chg=' + options.gridSize[0] + ',' + options.gridSize[1] +
+				'&chg=' + options.gridSize[0] + ',' + options.gridSize[1] +
 				(options.gridLine.length == 0 ? '' :
 				',' + options.gridLine[0] + ',' + options.gridLine[1] +
 				(options.gridOffsets.length == 0 ? '' :
 				',' + options.gridOffsets[0] + ',' + options.gridOffsets[1])));
 		};
-		var addMarkers = function() {
-			var markers = '';
-			var decodeItem = function(item, positioned) {
-				if (item == 'all') {
-					return -1;
-				}
-				if (typeof item == 'string') {
-					var matches = /^every(\d+)(?:\[(\d+):(\d+)\])?$/.exec(item);
-					if (matches) {
-						var every = parseInt(matches[1], 10);
-						return (matches[2] && matches[3] ?
-							(positioned ? Math.max(0.0, Math.min(1.0, matches[2])) : matches[2]) + ':' +
-							(positioned ? Math.max(0.0, Math.min(1.0, matches[3])) : matches[3]) + ':' +
-							every : -every);
-					}
-				}
-				if (isArray(item)) {
-					$.map(item, function(v, i) {
-						return (positioned ? Math.max(0.0, Math.min(1.0, v)) : v);
-					});
-					return item.join(':');
-				}
-				return item;
-			};
-			for (var i = 0; i < options.markers.length; i++) {
-				var marker = options.markers[i];
-				var shape = SHAPES[marker.shape] || marker.shape;
-				markers += '|' + (marker.positioned ? '@' : '') + shape +
-					('fNt'.indexOf(shape) > -1 ? marker.text || '' : '') + ',' +
-					$.gchart.color(marker.color) + ',' +
-					marker.series + ',' + decodeItem(marker.item, marker.positioned) +
-					',' + marker.size + ',' + (PRIORITIES[marker.priority] != null ?
-					PRIORITIES[marker.priority] : marker.priority);
-			}
-			for (var i = 0; i < options.ranges.length; i++) {
-				markers += '|' + (options.ranges[i].vertical ? 'R' : 'r') + ',' +
-					$.gchart.color(options.ranges[i].color) + ',0,' +
-					options.ranges[i].start + ',' +
-					(options.ranges[i].end || options.ranges[i].start + 0.005);
-			}
-			for (var i = 0; i < options.series.length; i++) {
-				markers += (!options.series[i].fillColor ? '' :
-					'|b,' + $.gchart.color(options.series[i].fillColor) +
-					',' + i + ',' + (i + 1) + ',0');
-			}
-			return (markers ? '&amp;chm=' + markers.substr(1) : '');
-		};
 		var addLegends = function() {
 			return (!options.legend || legends.length <= options.series.length ? '' :
-				'&amp;chdl=' + legends.substr(1) + include('&amp;chdlp=',
+				'&chdl=' + legends.substr(1) + include('&chdlp=',
 				options.legend.charAt(0) + (options.legend.indexOf('V') > -1 ? 'v' : '')));
 		};
 		var addExtensions = function() {
 			var params = '';
 			for (var name in options.extension) {
-				params += '&amp;' + name + '=' + encodeURIComponent(options.extension[name]);
+				params += '&' + name + '=' + encodeURIComponent(options.extension[name]);
 			}
 			return params;
 		};
-		$(target).html('<img src="http://chart.apis.google.com/chart?cht=' + type +
+		return 'http://chart.apis.google.com/chart?cht=' + type +
 			addSize() + addMargins() +
 			(type == 'qr' ? qrOptions() : (type == 't' ? mapOptions() :
 			(type.charAt(0) == 'p' ? pieOptions() : standardOptions()))) +
-			addBarSizings() + addLineStyles() + addColours() + addTitle() + addAxes() +
-			addBackgrounds() + addGrids() + addMarkers() +
-			addLegends() + addExtensions() + '"/>');
+			addBarSizings() + addLineStyles() + addColours() + addTitle() +
+			this._addAxes(options) + addBackgrounds() + addGrids() +
+			this._addMarkers(options) + addLegends() + addExtensions();
+	},
+
+	/* Generate axes parameters.
+	   @param  options  (object) the current instance settings
+	   @return  (string) the axes parameters */
+	_addAxes: function(options) {
+		var axes = '';
+		var axesLabels = '';
+		var axesPositions = '';
+		var axesRanges = '';
+		var axesStyles = '';
+		var axesTicks = '';
+		for (var i = 0; i < options.axes.length; i++) {
+			var axisDef = (typeof options.axes[i] == 'string' ?
+				new GChartAxis(options.axes[i]) : options.axes[i]);
+			var axis = axisDef.axis().charAt(0);
+			axes += ',' + (axis == 'b' ? 'x' : (axis == 'l' ? 'y' : axis));
+			if (axisDef.labels()) {
+				var labels = '';
+				for (var j = 0; j < axisDef.labels().length; j++) {
+					labels += '|' + encodeURIComponent(axisDef.labels()[j] || '');
+				}
+				axesLabels += (labels ? '|' + i + ':' + labels : '');
+			}
+			if (axisDef.positions()) {
+				var positions = '';
+				for (var j = 0; j < axisDef.positions().length; j++) {
+					positions += ',' + axisDef.positions()[j];
+				}
+				axesPositions += (positions ? '|' + i + positions : '');
+			}
+			if (axisDef.range()) {
+				var range = axisDef.range();
+				axesRanges += '|' + i + ',' + range[0] + ',' + range[1] +
+					(range[2] ? ',' + range[2] : '');
+			}
+			if (axisDef.style() || axisDef.drawing() || axisDef.ticks()) {
+				var style = axisDef.style() || {};
+				var ticks = axisDef.ticks() || {};
+				axesStyles += '|' + i + ',' +
+					$.gchart.color(style.color || 'gray') + ',' +
+					(style.size || 10) + ',' + 
+					(ALIGNMENTS[style.alignment] || style.alignment || 0) +
+					(!axisDef.drawing() && !ticks.color ? '' : ',' +
+					(DRAWING[axisDef.drawing()] || axisDef.drawing() || 'lt') +
+					(ticks.color ? ',' + $.gchart.color(ticks.color) : ''));
+			}
+			if (axisDef.ticks() && axisDef.ticks().length) {
+				axesTicks += '|' + i + ',' + axisDef.ticks().length;
+			}
+		}
+		return (!axes ? '' : '&chxt=' + axes.substr(1) +
+			(!axesLabels ? '' : '&chxl=' + axesLabels.substr(1)) +
+			(!axesPositions ? '' : '&chxp=' + axesPositions.substr(1)) +
+			(!axesRanges ? '' : '&chxr=' + axesRanges.substr(1)) +
+			(!axesStyles ? '' : '&chxs=' + axesStyles.substr(1)) +
+			(!axesTicks ? '' : '&chxtc=' + axesTicks.substr(1)));
+	},
+
+	/* Generate markers parameters.
+	   @param  options  (object) the current instance settings
+	   @return  (string) the markers parameters */
+	_addMarkers: function(options) {
+		var markers = '';
+		var decodeItem = function(item, positioned) {
+			if (item == 'all') {
+				return -1;
+			}
+			if (typeof item == 'string') {
+				var matches = /^every(\d+)(?:\[(\d+):(\d+)\])?$/.exec(item);
+				if (matches) {
+					var every = parseInt(matches[1], 10);
+					return (matches[2] && matches[3] ?
+						(positioned ? Math.max(0.0, Math.min(1.0, matches[2])) : matches[2]) + ':' +
+						(positioned ? Math.max(0.0, Math.min(1.0, matches[3])) : matches[3]) + ':' +
+						every : -every);
+				}
+			}
+			if (isArray(item)) {
+				$.map(item, function(v, i) {
+					return (positioned ? Math.max(0.0, Math.min(1.0, v)) : v);
+				});
+				return item.join(':');
+			}
+			return item;
+		};
+		for (var i = 0; i < options.markers.length; i++) {
+			var marker = options.markers[i];
+			var shape = SHAPES[marker.shape] || marker.shape;
+			markers += '|' + (marker.positioned ? '@' : '') + shape +
+				('fNt'.indexOf(shape) > -1 ? marker.text || '' : '') + ',' +
+				$.gchart.color(marker.color) + ',' +
+				marker.series + ',' + decodeItem(marker.item, marker.positioned) +
+				',' + marker.size + ',' + (PRIORITIES[marker.priority] != null ?
+				PRIORITIES[marker.priority] : marker.priority);
+		}
+		for (var i = 0; i < options.ranges.length; i++) {
+			markers += '|' + (options.ranges[i].vertical ? 'R' : 'r') + ',' +
+				$.gchart.color(options.ranges[i].color) + ',0,' +
+				options.ranges[i].start + ',' +
+				(options.ranges[i].end || options.ranges[i].start + 0.005);
+		}
+		for (var i = 0; i < options.series.length; i++) {
+			markers += (!options.series[i].fillColor ? '' :
+				'|b,' + $.gchart.color(options.series[i].fillColor) +
+				',' + i + ',' + (i + 1) + ',0');
+		}
+		return (markers ? '&chm=' + markers.substr(1) : '');
+	},
+
+	/* Update the Google charting div with the new settings.
+	   @param  target   (element) the containing division
+	   @param  options  (object) the new settings for this Google chart instance */
+	_updateChart: function(target, options) {
+		var img = $(new Image()); // Prepare to load chart image in background
+		img.load(function() { // Once loaded...
+			$(target).find('img').remove().end().append(this);
+		});
+		options._src = this._generateChart(options);
+		$(img).attr('src', options._src);
 	},
 
 	/* Encode all series with text encoding.
@@ -980,7 +1000,7 @@ $.extend(GChart.prototype, {
 				options.series[i].maxValue : maxValue);
 		}
 		return 't' + (options.visibleSeries || '') + ':' + data.substr(1) +
-			'&amp;chds=' + minMax.substr(1);
+			'&chds=' + minMax.substr(1);
 	},
 
 	/* Encode values in text format: numeric min to max, comma separated, min - 1 for null
