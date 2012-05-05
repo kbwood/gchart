@@ -1,5 +1,5 @@
 /* http://keith-wood.name/gChart.html
-   Google Chart interface for jQuery v1.3.0.
+   Google Chart interface for jQuery v1.3.1.
    See API details at http://code.google.com/apis/chart/.
    Written by Keith Wood (kbwood{at}iinet.com.au) September 2008.
    Dual licensed under the GPL (http://dev.jquery.com/browser/trunk/jquery/GPL-LICENSE.txt) and 
@@ -17,6 +17,8 @@ function GChart() {
 	this._defaults = {
 		width: 0, // Width of the chart
 		height: 0, // Height of the chart
+		format: 'png', // Returned format: png, gif
+		usePost: false, // True to POST instead of GET - for larger charts with more data
 		margins: null, // The minimum margins (pixels) around the chart:
 			// all or [left/right, top/bottom] or [left, right, top, bottom]
 		title: '', // The title of the chart
@@ -73,7 +75,8 @@ function GChart() {
 		qrECLevel: null, // Error correction level: low, medium, quarter, high
 		qrMargin: null, // Margin (squares) around QR code, default is 4
 		// Callback
-		onLoad: null // Function to call when loaded
+		onLoad: null, // Function to call when loaded
+		provideJSON: false // True to return JSON description of chart with the onLoad callback
 	};
 };
 
@@ -93,8 +96,8 @@ var CHART_TYPES = {line: 'lc', lineXY: 'lxy', sparkline: 'ls',
 	p: 'p', p3: 'p3', pc: 'pc', v: 'v', s: 's',
 	r: 'r', rs: 'rs', t: 't', gom: 'gom', qr: 'qr', tx: 'tx'};
 /* Mapping from plugin shape types to Google chart shapes. */
-var SHAPES = {annotation: 'A', arrow: 'a', circle: 'o', cross: 'x', diamond: 'd',
-	down: 'v', errorbar: 'E', flag: 'f', financial: 'F', horizbar: 'H',
+var SHAPES = {annotation: 'A', arrow: 'a', candlestick: 'F', circle: 'o', cross: 'x',
+	diamond: 'd', down: 'v', errorbar: 'E', flag: 'f', financial: 'F', horizbar: 'H',
 	horizontal: 'h', number: 'N', plus: 'c', rectangle: 'C', sparkfill: 'B',
 	sparkline: 'D', sparkslice: 'b', square: 's', text: 't', vertical: 'V'};
 /* Mapping from plugin priority names to chart priority codes. */
@@ -798,6 +801,64 @@ $.extend(GChart.prototype, {
 		return new GChartAxis(axis, labels, positions, rangeStart,
 			rangeEnd, rangeInterval, colour, alignment, size, format);
 	},
+	
+	/* Determine the region within a chart.
+	   @param  event     (MouseEvent) the mouse event contining the cursor position
+	   @param  jsonData  (object) the JSON description of the chart
+	   @return  (object) the current region details (type, series, and point) or null if none */
+	findRegion: function(event, jsonData) {
+		if (!jsonData || !jsonData.chartshape) {
+			return null;
+		}
+		var decodeName = function(name) {
+			var matches = name.match(/([^\d]+)(\d+)(?:_(\d)+)?/);
+			return {type: matches[1], series: parseInt(matches[2]), point: parseInt(matches[3] || -1)};
+		};
+		var offset = $(event.target).offset();
+		var x = event.pageX - offset.left;
+		var y = event.pageY - offset.top;
+		for (var i = 0; i < jsonData.chartshape.length; i++) {
+			var shape = jsonData.chartshape[i];
+			switch (shape.type) {
+				case 'RECT':
+					if (shape.coords[0] <= x && x <= shape.coords[2] &&
+							shape.coords[1] <= y && y <= shape.coords[3]) {
+						return decodeName(shape.name);
+					}
+					break;
+				case 'POLY':
+					if ($.gchart._insidePolygon(shape.coords, x, y)) {
+						return decodeName(shape.name);
+					}
+					break;
+			}
+		}
+		return null;
+	},
+
+	/* Determine whether a point is within a polygon.
+	   Ray casting algorithm adapted from http://ozviz.wasp.uwa.edu.au/~pbourke/geometry/insidepoly/.
+	   @param  coords  (number[]) the polygon coords as [x1, y1, x2, y2, ...]
+	   @param  x       (number) the point's x-coord
+	   @param  y       (number) the point's y-coord
+	   @return  (boolean) true if the point is inside, false if not */
+	_insidePolygon: function(coords, x, y) {
+		var counter = 0;
+		var p1 = [coords[0], coords[1]];
+		for (var i = 2; i <= coords.length; i += 2) {
+			var p2 = [coords[i % coords.length], coords[i % coords.length + 1]];
+			if (y > Math.min(p1[1], p2[1]) && y <= Math.max(p1[1], p2[1])) {
+				if (x <= Math.max(p1[0], p2[0]) && p1[1] != p2[1]) {
+					var xinters = (y - p1[1]) * (p2[0] - p1[0]) / (p2[1] - p1[1]) + p1[0];
+					if (p1[0] == p2[0] || x <= xinters) {
+						counter++;
+					}
+				}
+			}
+			p1 = p2;
+		}
+		return (counter % 2 != 0);
+	},
 
 	/* Attach the Google chart functionality to a div.
 	   @param  target   (element) the containing division
@@ -1004,7 +1065,10 @@ $.extend(GChart.prototype, {
 			}
 			return params;
 		};
-		return 'http://chart.apis.google.com/chart?cht=' + type + addSize() + addMargins() +
+		var format = options.format || 'png';
+		return 'http://chart.apis.google.com/chart?' +
+			(format != 'png' ? 'chof=' + format + '&' : '') +
+			'cht=' + type + addSize() + addMargins() +
 			(type == 'qr' ? qrOptions() : (type == 't' ? mapOptions() :
 			(type.charAt(0) == 'p' ? pieOptions() : standardOptions()))) +
 			addBarSizings() + addLineStyles() + addColours() + addTitle() +
@@ -1180,15 +1244,70 @@ $.extend(GChart.prototype, {
 	   @param  target   (element) the containing division
 	   @param  options  (object) the new settings for this Google chart instance */
 	_updateChart: function(target, options) {
-		var img = $(new Image()); // Prepare to load chart image in background
-		img.load(function() { // Once loaded...
-			$(target).find('img').remove().end().append(this);
-			if (options.onLoad) {
-				options.onLoad.apply(target, []);
-			}
-		});
 		options._src = this._generateChart(options);
-		$(img).attr('src', options._src);
+		if (options.usePost) {
+			var form = '<form action="http://chart.apis.google.com/chart?' +
+				Math.floor(Math.random() * 1e8) + '" method="POST">';
+			var pattern = /(\w+)=([^&]*)/g;
+			var match = pattern.exec(options._src);
+			while (match) {
+				form += '<input type="hidden" name="' + match[1] + '" value="' +
+					($.inArray(match[1], ['chdl', 'chl', 'chtt', 'chxl']) > -1 ?
+					decodeURIComponent(match[2]) : match[2]) + '">';
+				match = pattern.exec(options._src);
+			}
+			form += '</form>';
+			target = $(target);
+			target.empty();
+			var ifr = $('<iframe></iframe>').appendTo(target).css({width: '100%', height: '100%'});
+			var doc = ifr.contents()[0]; // Write iframe directly
+			doc.open();
+			doc.write(form);
+			doc.close();
+			ifr.show().contents().find('form').submit();	
+		}
+		else {
+			var img = $(new Image()); // Prepare to load chart image in background
+			img.load(function() { // Once loaded...
+				$(target).find('img').remove().end().append(this); // Replace
+				if (options.onLoad) {
+					if (options.provideJSON) { // Retrieve JSON details
+						$.getJSON(options._src + '&chof=json&callback=?', 
+							function(data) {
+								options.onLoad.apply(target, [$.gchart._normaliseRects(data)]);
+							});
+					}
+					else {
+						options.onLoad.apply(target, []);
+					}
+				}
+			});
+			$(img).attr('src', options._src);
+		}
+	},
+
+	/* Ensure that rectangle coords go from min to max.
+	   @param  jsonData  (object) the JSON description of the chart
+	   @return  (object) the normalised JSON description */
+	_normaliseRects: function(jsonData) {
+		if (jsonData && jsonData.chartshape) {
+			for (var i = 0; i < jsonData.chartshape.length; i++) {
+				var shape = jsonData.chartshape[i];
+				if (shape.type == 'RECT') {
+					if (shape.coords[0] > shape.coords[2]) {
+						var temp = shape.coords[0];
+						shape.coords[0] = shape.coords[2];
+						shape.coords[2] = temp;
+					}
+					if (shape.coords[1] > shape.coords[3]) {
+						var temp = shape.coords[1];
+						shape.coords[1] = shape.coords[3];
+						shape.coords[3] = temp;
+					}
+				}
+			}
+		}
+		return jsonData;
 	},
 
 	/* Encode all series with text encoding.
