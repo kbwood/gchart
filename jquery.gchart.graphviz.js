@@ -1,9 +1,8 @@
 /* http://keith-wood.name/gChart.html
-   Google Chart GraphViz extension for jQuery v1.4.3.
+   Google Chart GraphViz extension for jQuery v1.5.0.
    See API details at http://code.google.com/apis/chart/.
    Written by Keith Wood (kbwood{at}iinet.com.au) September 2008.
-   Dual licensed under the GPL (http://dev.jquery.com/browser/trunk/jquery/GPL-LICENSE.txt) and 
-   MIT (http://dev.jquery.com/browser/trunk/jquery/MIT-LICENSE.txt) licenses. 
+   Available under the MIT (https://github.com/jquery/jquery/blob/master/MIT-LICENSE.txt) license. 
    Please attribute the author if you use it. */
 
 (function($) { // Hide scope, no $ conflict

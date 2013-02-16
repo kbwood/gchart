@@ -1,27 +1,26 @@
 /* http://keith-wood.name/gChart.html
-   Google Chart interface extensions for jQuery v1.4.3.
+   Google Chart interface extensions for jQuery v1.5.0.
    See API details at http://code.google.com/apis/chart/.
    Written by Keith Wood (kbwood{at}iinet.com.au) September 2008.
-   Dual licensed under the GPL (http://dev.jquery.com/browser/trunk/jquery/GPL-LICENSE.txt) and 
-   MIT (http://dev.jquery.com/browser/trunk/jquery/MIT-LICENSE.txt) licenses. 
+   Available under the MIT (https://github.com/jquery/jquery/blob/master/MIT-LICENSE.txt) license. 
    Please attribute the author if you use it. */
 
 (function($) { // Hide scope, no $ conflict
 
 $.extend($.gchart._defaults, {
-		// Maps -------------------
-		mapLatLong: false, // True to use lat/long coords in mapArea
-		mapArea: null, // New maps: (number) pixel border all around or
-			// (number[4]) individual pixel borders or lat/long
-			// Original maps: the general area to show:
-			// world, africa, asia, europe, middle_east, south_america, usa
-		mapRegions: [], // List of country/state codes to plot
-		mapDefaultColor: 'bebebe', // The colour for non-plotted countries/states
-		mapColors: ['blue', 'red'], // The colour range for plotted countries/states
-		// QR Code ----------------
-		qrECLevel: null, // Error correction level: low, medium, quarter, high
-		qrMargin: null // Margin (squares) around QR code, default is 4
-	});
+	// Maps -------------------
+	mapLatLong: false, // True to use lat/long coords in mapArea
+	mapArea: null, // New maps: (number) pixel border all around or
+		// (number[4]) individual pixel borders or lat/long
+		// Original maps: the general area to show:
+		// world, africa, asia, europe, middle_east, south_america, usa
+	mapRegions: [], // List of country/state codes to plot
+	mapDefaultColor: 'bebebe', // The colour for non-plotted countries/states
+	mapColors: ['blue', 'red'], // The colour range for plotted countries/states
+	// QR Code ----------------
+	qrECLevel: null, // Error correction level: low, medium, quarter, high
+	qrMargin: null // Margin (squares) around QR code, default is 4
+});
 
 // New chart types: formula, map, mapOriginal, meter, qrCode, scatter, venn
 $.extend($.gchart._chartTypes, {formula: 'tx', map: 'map', mapOriginal: 't',

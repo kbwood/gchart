@@ -1,9 +1,8 @@
 /* http://keith-wood.name/gChart.html
-   Google Chart icons extension for jQuery v1.4.3.
+   Google Chart icons extension for jQuery v1.5.0.
    See API details at http://code.google.com/apis/chart/.
    Written by Keith Wood (kbwood{at}iinet.com.au) September 2008.
-   Dual licensed under the GPL (http://dev.jquery.com/browser/trunk/jquery/GPL-LICENSE.txt) and 
-   MIT (http://dev.jquery.com/browser/trunk/jquery/MIT-LICENSE.txt) licenses. 
+   Available under the MIT (https://github.com/jquery/jquery/blob/master/MIT-LICENSE.txt) license. 
    Please attribute the author if you use it. */
 
 (function($) { // Hide scope, no $ conflict
@@ -42,12 +41,18 @@ var EMBEDDED_ALIGNMENTS = {topLeft: 'tl', top: 'ht', topRight: 'tr', left: 'vl',
 	hv: 'hv', r: 'vr', vr: 'vr', bl: 'lb', lb: 'lb', b: 'hb', hb: 'hb', br: 'rb', rb: 'rb'};
 
 $.extend($.gchart._defaults, {
-		icons: [] // Definitions of dynamic icons for the chart, each entry is an object with
-			// name (string), data (string), series (number), item (number), zIndex (number),
-			// position (number[2]), offsets (number[2])
-	});
+	icons: [] // Definitions of dynamic icons for the chart, each entry is an object with
+		// name (string), data (string), series (number), item (number), zIndex (number),
+		// position (number[2]), offsets (number[2])
+});
 
-$.gchart._chartOptions = $.gchart._chartOptions.join().replace(/Markers/, 'Markers,Icons').split(',');
+try {
+	$.gchart._chartOptions.splice($.gchart._chartOptions.indexOf('Markers') + 1, 0, 'Icons');
+}
+catch (e) { // IE playing games!
+	$.gchart._chartOptions = ['Margins', 'DataFunctions', 'BarSizings', 'LineStyles', 'Colours',
+		'Title', 'Axes', 'Backgrounds', 'Grids', 'Markers', 'Icons', 'Legends', 'Extensions'];
+}
 
 $.extend($.gchart._prototype.prototype, {
 

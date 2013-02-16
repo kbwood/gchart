@@ -1,9 +1,8 @@
 /* http://keith-wood.name/gChart.html
-   Google Chart interface for jQuery v1.4.3.
+   Google Chart interface for jQuery v1.5.0.
    See API details at http://code.google.com/apis/chart/.
    Written by Keith Wood (kbwood{at}iinet.com.au) September 2008.
-   Dual licensed under the GPL (http://dev.jquery.com/browser/trunk/jquery/GPL-LICENSE.txt) and 
-   MIT (http://dev.jquery.com/browser/trunk/jquery/MIT-LICENSE.txt) licenses. 
+   Available under the MIT (https://github.com/jquery/jquery/blob/master/MIT-LICENSE.txt) license. 
    Please attribute the author if you use it. */
 
 /* Request a chart from Google charts.
@@ -83,8 +82,6 @@ function GChart() {
 		bho: 'bho', bvo: 'bvo', p: 'p', p3: 'p3', pc: 'pc', r: 'r', rs: 'rs'};
 };
 
-/* The name of the data property that holds the instance settings. */
-var PROP_NAME = 'gChart';
 /* Translations of text colour names into chart values. */
 var COLOURS = {aqua: '008080', black: '000000', blue: '0000ff', fuchsia: 'ff00ff', gray: '808080',
 	green: '008000', grey: '808080', lime: '00ff00', maroon: '800000', navy: '000080',
@@ -121,7 +118,9 @@ $.extend(GChart.prototype, {
 
 	/* Class name added to elements to indicate already configured with Google charting. */
 	markerClassName: 'hasGChart',
-	
+	/* Name of the data property for instance settings. */
+	propertyName: 'gChart',
+
 	/* Marker value to indicate min/max calculation from data. */
 	calculate: -0.123456,
 	
@@ -136,9 +135,11 @@ $.extend(GChart.prototype, {
 	formatCurrency: 'c',
 
 	/* Override the default settings for all Google chart instances.
-	   @param  options  (object) the new settings to use as defaults */
+	   @param  options  (object) the new settings to use as defaults
+	   @return  (GChart) this object */
 	setDefaults: function(options) {
-		extendRemove(this._defaults, options || {});
+		$.extend(this._defaults, options || {});
+		return this;
 	},
 
 	/* Create a new data series.
@@ -230,14 +231,14 @@ $.extend(GChart.prototype, {
 				$.each(cols, function(i, val) {
 					if (sColumns[i]) { // Non-data value
 						var pos = $.inArray(sColumns[i], fields);
-						series[sColumns[i]] = (pos > 2 ? $.gchart._numeric(val, 0) : val);
+						series[sColumns[i]] = (pos > 2 ? plugin._numeric(val, 0) : val);
 					}
 					else if (xColumns[i]) { // X-coordinate
-						saveX = (val ? $.gchart._numeric(val, -1) : null);
+						saveX = (val ? plugin._numeric(val, -1) : null);
 						xyData = true;
 					}
 					else {
-						var y = $.gchart._numeric(val, -1);
+						var y = plugin._numeric(val, -1);
 						data.push(saveX != null ? [saveX, y] : y);
 						saveX = null;
 					}
@@ -263,7 +264,7 @@ $.extend(GChart.prototype, {
 	   @param  xml  (string or Document) the XML containing the series data
 	   @return  (object[]) the series definitions */
 	seriesFromXml: function(xml) {
-		if ($.browser.msie && typeof xml == 'string') {
+		if (typeof ActiveXObject != 'undefined' && typeof xml == 'string') {
 			var doc = new ActiveXObject('Microsoft.XMLDOM');
 			doc.validateOnParse = false;
 			doc.resolveExternals = false;
@@ -282,23 +283,23 @@ $.extend(GChart.prototype, {
 					var x = point.attr('x');
 					if (x != null) {
 						xyData = true;
-						x = $.gchart._numeric(x, -1);
+						x = plugin._numeric(x, -1);
 					}
-					y = $.gchart._numeric(point.attr('y'), -1);
+					y = plugin._numeric(point.attr('y'), -1);
 					data.push(x ? [x, y] : y);
 				});
 				var segments = series.attr('lineSegments');
 				if (segments) {
 					segments = segments.split(',');
 					for (var i = 0; i < segments.length; i++) {
-						segments[i] = $.gchart._numeric(segments[i], 1);
+						segments[i] = plugin._numeric(segments[i], 1);
 					}
 				}
 				seriesData.push({label: series.attr('label'), data: data,
 					color: series.attr('color'), fillColor: series.attr('fillColor'),
-					minValue: $.gchart._numeric(series.attr('minValue'), null),
-					maxValue: $.gchart._numeric(series.attr('maxValue'), null),
-					lineThickness: $.gchart._numeric(series.attr('lineThickness'), null),
+					minValue: plugin._numeric(series.attr('minValue'), null),
+					maxValue: plugin._numeric(series.attr('maxValue'), null),
+					lineThickness: plugin._numeric(series.attr('lineThickness'), null),
 					lineSegments: segments});
 			});
 		}
@@ -345,10 +346,10 @@ $.extend(GChart.prototype, {
 					yData.push(series[i].data[j][1]);
 				}
 			}
-			xySeries.push($.gchart.series(series[i].label, xData, series[i].color,
+			xySeries.push(plugin.series(series[i].label, xData, series[i].color,
 				series[i].fillColor, series[i].minValue, series[i].maxValue,
 				series[i].lineThickness, series[i].lineSegments));
-			xySeries.push($.gchart.series('', yData, '',
+			xySeries.push(plugin.series('', yData, '',
 				series[i].fillColor, series[i].minValue, series[i].maxValue,
 				series[i].lineThickness, series[i].lineSegments));
 		}
@@ -648,7 +649,7 @@ $.extend(GChart.prototype, {
 					}
 					break;
 				case 'POLY':
-					if ($.gchart._insidePolygon(shape.coords, x, y)) {
+					if (plugin._insidePolygon(shape.coords, x, y)) {
 						return decodeName(shape.name);
 					}
 					break;
@@ -682,49 +683,58 @@ $.extend(GChart.prototype, {
 	},
 
 	/* Attach the Google chart functionality to a div.
-	   @param  target   (element) the containing division
-	   @param  options  (object) the settings for this Google chart instance (optional) */
-	_attachGChart: function(target, options) {
+	   @param  target   (element) the control to affect
+	   @param  options  (object) the custom options for this instance */
+	_attachPlugin: function(target, options) {
 		target = $(target);
 		if (target.is('.' + this.markerClassName)) {
 			return;
 		}
-		target.addClass(this.markerClassName);
-		options = options || {};
 		var width = options.width || parseInt(target.css('width'), 10);
 		var height = options.height || parseInt(target.css('height'), 10);
-		var allOptions = $.extend({}, this._defaults, options,
-			{width: width, height: height});
-		$.data(target[0], PROP_NAME, allOptions);
-		this._updateChart(target[0], allOptions);
+		var inst = {options: $.extend({}, this._defaults, options, {width: width, height: height})};
+		target.addClass(this.markerClassName).data(this.propertyName, inst);
+		this._updateChart(target[0], inst);
 	},
 
-	/* Reconfigure the settings for a Google charting div.
-	   @param  target   (element) the containing division
-	   @param  name     (object) the new settings for this Google chart instance or
-	                    (string) the name of a single option
-	   @param  value    (any, optional) the option's value */
-	_changeGChart: function(target, name, value) {
-		var options = name || {};
-		if (typeof name == 'string') {
+	/* Retrieve or reconfigure the settings for a Google charting div.
+	   @param  target   (element) the control to affect
+	   @param  options  (object) the new options for this instance or
+	                    (string) an individual property name
+	   @param  value    (any) the individual property value (omit if options
+	                    is an object or to retrieve the value of a setting)
+	   @return  (any) if retrieving a value */
+	_optionPlugin: function(target, options, value) {
+		target = $(target);
+		if (!options || (typeof options == 'string' && value == null)) { // Get option
+			var inst = target.data(this.propertyName);
+			var name = options;
+			options = (inst || {}).options;
+			return (options && name ? options[name] : options);
+		}
+
+		if (!target.hasClass(this.markerClassName)) {
+			return;
+		}
+		options = options || {};
+		if (typeof options == 'string') {
+			var name = options;
 			options = {};
 			options[name] = value;
 		}
-		var curOptions = $.data(target, PROP_NAME);
-		extendRemove(curOptions || {}, options);
-		$.data(target, PROP_NAME, curOptions);
-		this._updateChart(target, curOptions);
+		var inst = target.data(this.propertyName);
+		$.extend(inst.options, options);
+		this._updateChart(target, inst);
 	},
 
 	/* Remove the Google charting functionality from a div.
-	   @param  target  (element) the containing division */
-	_destroyGChart: function(target) {
+	   @param  target  (element) the control to affect */
+	_destroyPlugin: function(target) {
 		target = $(target);
-		if (!target.is('.' + this.markerClassName)) {
+		if (!target.hasClass(this.markerClassName)) {
 			return;
 		}
-		target.removeClass(this.markerClassName).empty();
-		$.removeData(target[0], PROP_NAME);
+		target.removeClass(this.markerClassName).empty().removeData(this.propertyName);
 	},
 
 	/* Generate the Google charting request with the new settings.
@@ -763,7 +773,7 @@ $.extend(GChart.prototype, {
 	   @return  (string) the standard chart options */
 	standardOptions: function(options, labels) {
 		var encoding = this['_' + options.encoding + 'Encoding'] || this['_textEncoding'];
-		return '&chd=' + encoding.apply($.gchart, [options]) +
+		return '&chd=' + encoding.apply(plugin, [options]) +
 			(labels ? '&chl=' + labels.substr(1) : '');
 	},
 
@@ -833,9 +843,9 @@ $.extend(GChart.prototype, {
 	addBarSizings: function(type, options) {
 		return (type.substr(0, 1) != 'b' ? '' : (options.barWidth == null ? '' :
 			'&chbh=' + options.barWidth +
-			(options.barSpacing == null ? '' : ',' + (options.barWidth == $.gchart.barWidthRelative ?
+			(options.barSpacing == null ? '' : ',' + (options.barWidth == plugin.barWidthRelative ?
 			Math.min(Math.max(options.barSpacing, 0.0), 1.0) : options.barSpacing) +
-			(options.barGroupSpacing == null ? '' : ',' + (options.barWidth == $.gchart.barWidthRelative ?
+			(options.barGroupSpacing == null ? '' : ',' + (options.barWidth == plugin.barWidthRelative ?
 			Math.min(Math.max(options.barGroupSpacing, 0.0), 1.0) : options.barGroupSpacing)))) +
 			(options.barZeroPoint == null ? '' : '&chp=' + options.barZeroPoint));
 	},
@@ -871,7 +881,7 @@ $.extend(GChart.prototype, {
 				var sep = ',';
 				$.each(($.isArray(options.series[i].color) ? options.series[i].color :
 						[options.series[i].color]), function(i, v) {
-					var colour = $.gchart.color(v || '');
+					var colour = plugin.color(v || '');
 					if (colour) {
 						hasColour = true;
 					}
@@ -889,9 +899,9 @@ $.extend(GChart.prototype, {
 	   @param  options  (object) the chart settings
 	   @return  (string) the chart title options */
 	addTitle: function(type, options) {
-		return $.gchart._include('&chtt=', encodeURIComponent(options.title)) +
+		return plugin._include('&chtt=', encodeURIComponent(options.title)) +
 			(options.titleColor || options.titleSize ?
-			'&chts=' + ($.gchart.color(options.titleColor) || '000000') + ',' +
+			'&chts=' + (plugin.color(options.titleColor) || '000000') + ',' +
 			(options.titleSize || 14) : '');
 	},
 
@@ -910,12 +920,12 @@ $.extend(GChart.prototype, {
 				return '';
 			}
 			if (typeof background == 'string') {
-				return area + ',s,' + $.gchart.color(background);
+				return area + ',s,' + plugin.color(background);
 			}
 			var bg = area + ',l' + (background.striped ? 's' : 'g') + ',' +
 				(GRADIENTS[background.angle] != null ? GRADIENTS[background.angle] : background.angle);
 			for (var i = 0; i < background.colorPoints.length; i++) {
-				bg += ',' + $.gchart.color(background.colorPoints[i][0]) +
+				bg += ',' + plugin.color(background.colorPoints[i][0]) +
 					',' + background.colorPoints[i][1];
 			}
 			return bg;
@@ -962,10 +972,10 @@ $.extend(GChart.prototype, {
 		return (!options.legend ||
 			(type != 'lxy' && legends.length <= options.series.length) ||
 			(type == 'lxy' && legends.length <= (options.series.length / 2)) ? '' :
-			'&chdl=' + legends.substr(1) + $.gchart._include('&chdlp=',
+			'&chdl=' + legends.substr(1) + plugin._include('&chdlp=',
 			options.legend.charAt(0) + (options.legend.indexOf('V') > -1 ? 'v' : '') +
-			$.gchart._include('|', order)) + (options.legendColor || options.legendSize ? '&chdls=' +
-			($.gchart.color(options.legendColor) || '000000') + ',' + (options.legendSize || 11) : ''));
+			plugin._include('|', order)) + (options.legendColor || options.legendSize ? '&chdls=' +
+			(plugin.color(options.legendColor) || '000000') + ',' + (options.legendSize || 11) : ''));
 	},
 
 	/* Generate the options for chart extensions.
@@ -1023,13 +1033,13 @@ $.extend(GChart.prototype, {
 				var style = axisDef.style() || {};
 				axesStyles += '|' + i +
 					(axisDef.format() ? 'N' + this.numberFormat(axisDef.format()) : '') + ',' +
-					$.gchart.color(style.color || 'gray') + ',' +
+					plugin.color(style.color || 'gray') + ',' +
 					(style.size || 10) + ',' + 
 					(ALIGNMENTS[style.alignment] || style.alignment || 0) + ',' +
 					(DRAWING[axisDef.drawing()] || axisDef.drawing() || 'lt') +
 					(!ticks.color && !axisDef.color() ? '' :
-					',' + (ticks.color ? $.gchart.color(ticks.color) : '808080') +
-					(!axisDef.color() ? '' : ',' + $.gchart.color(axisDef.color())));
+					',' + (ticks.color ? plugin.color(ticks.color) : '808080') +
+					(!axisDef.color() ? '' : ',' + plugin.color(axisDef.color())));
 			}
 			if (ticks.length) {
 				axesTicks += '|' + i + ',' + ($.isArray(ticks.length) ? ticks.length.join(',') : ticks.length);
@@ -1086,7 +1096,7 @@ $.extend(GChart.prototype, {
 			}
 			markers += '|' + (marker.positioned ? '@' : '') + shape +
 				('AfNt'.indexOf(shape) > -1 ? escapeText(marker.text || '') : '') + ',' +
-				$.gchart.color(marker.color) + ',' +
+				plugin.color(marker.color) + ',' +
 				marker.series + ',' + decodeItem(marker.item, marker.positioned) +
 				',' + marker.size + ',' + (PRIORITIES[marker.priority] != null ?
 				PRIORITIES[marker.priority] : marker.priority) +
@@ -1096,7 +1106,7 @@ $.extend(GChart.prototype, {
 		}
 		for (var i = 0; i < options.ranges.length; i++) {
 			markers += '|' + (options.ranges[i].vertical ? 'R' : 'r') + ',' +
-				$.gchart.color(options.ranges[i].color) + ',0,' +
+				plugin.color(options.ranges[i].color) + ',0,' +
 				options.ranges[i].start + ',' +
 				(options.ranges[i].end || options.ranges[i].start + 0.005);
 		}
@@ -1106,12 +1116,12 @@ $.extend(GChart.prototype, {
 					options.series[i].fillColor : [options.series[i].fillColor]);
 				for (var j = 0; j < fills.length; j++) {
 					if (typeof fills[j] == 'string') {
-						markers += '|b,' + $.gchart.color(options.series[i].fillColor) +
+						markers += '|b,' + plugin.color(options.series[i].fillColor) +
 							',' + i + ',' + (i + 1) + ',0';
 					}
 					else {
 						var props = ($.isArray(fills[j]) ? fills[j] : [fills[j].color, fills[j].range]);
-						markers += '|B,' + $.gchart.color(props[0]) +
+						markers += '|B,' + plugin.color(props[0]) +
 							',' + i + ',' + props[1] + ',0';
 					}
 				}
@@ -1121,21 +1131,21 @@ $.extend(GChart.prototype, {
 	},
 
 	/* Update the Google charting div with the new settings.
-	   @param  target   (element) the containing division
-	   @param  options  (object) the new settings for this Google chart instance */
-	_updateChart: function(target, options) {
-		options._src = this._generateChart(options);
-		if (options.usePost) {
+	   @param  target  (element) the containing division
+	   @param  inst    (object) the new settings for this Google chart instance */
+	_updateChart: function(target, inst) {
+		inst._src = this._generateChart(inst.options);
+		if (inst.options.usePost) {
 			var form = '<form action="' +
-				(options.secure ? 'https://chart.googleapis.com' : 'http://chart.apis.google.com') +
+				(inst.options.secure ? 'https://chart.googleapis.com' : 'http://chart.apis.google.com') +
 				'/chart?' + Math.floor(Math.random() * 1e8) + '" method="POST">';
 			var pattern = /(\w+)=([^&]*)/g;
-			var match = pattern.exec(options._src);
+			var match = pattern.exec(inst._src);
 			while (match) {
 				form += '<input type="hidden" name="' + match[1] + '" value="' +
 					($.inArray(match[1], ['chdl', 'chl', 'chtt', 'chxl']) > -1 ?
 					decodeURIComponent(match[2]) : match[2]) + '">';
-				match = pattern.exec(options._src);
+				match = pattern.exec(inst._src);
 			}
 			form += '</form>';
 			target = $(target);
@@ -1151,19 +1161,19 @@ $.extend(GChart.prototype, {
 			var img = $(new Image()); // Prepare to load chart image in background
 			img.load(function() { // Once loaded...
 				$(target).find('img').remove().end().append(this); // Replace
-				if (options.onLoad) {
-					if (options.provideJSON) { // Retrieve JSON details
-						$.getJSON(options._src + '&chof=json&callback=?', 
+				if ($.isFunction(inst.options.onLoad)) {
+					if (inst.options.provideJSON) { // Retrieve JSON details
+						$.getJSON(inst._src + '&chof=json&callback=?', 
 							function(data) {
-								options.onLoad.apply(target, [$.gchart._normaliseRects(data)]);
+								inst.options.onLoad.apply(target, [plugin._normaliseRects(data)]);
 							});
 					}
 					else {
-						options.onLoad.apply(target, []);
+						inst.options.onLoad.apply(target, []);
 					}
 				}
 			});
-			$(img).attr('src', options._src);
+			$(img).attr('src', inst._src);
 		}
 	},
 
@@ -1195,9 +1205,9 @@ $.extend(GChart.prototype, {
 	   @param  options  (object) the settings for this Google chart instance
 	   @return  (string) the encoded series data */
 	_textEncoding: function(options) {
-		var minValue = (options.minValue == $.gchart.calculate ?
+		var minValue = (options.minValue == plugin.calculate ?
 			this._calculateMinValue(options.series) : options.minValue);
-		var maxValue = (options.maxValue == $.gchart.calculate ?
+		var maxValue = (options.maxValue == plugin.calculate ?
 			this._calculateMaxValue(options.series) : options.maxValue);
 		var data = '';
 		for (var i = 0; i < options.series.length; i++) {
@@ -1227,9 +1237,9 @@ $.extend(GChart.prototype, {
 	   @param  options  (object) the settings for this Google chart instance
 	   @return  (string) the encoded series data */
 	_scaledEncoding: function(options) {
-		var minValue = (options.minValue == $.gchart.calculate ?
+		var minValue = (options.minValue == plugin.calculate ?
 			this._calculateMinValue(options.series) : options.minValue);
-		var maxValue = (options.maxValue == $.gchart.calculate ?
+		var maxValue = (options.maxValue == plugin.calculate ?
 			this._calculateMaxValue(options.series) : options.maxValue);
 		var data = '';
 		var minMax = '';
@@ -1262,9 +1272,9 @@ $.extend(GChart.prototype, {
 	   @param  options  (object) the settings for this Google chart instance
 	   @return  (string) the encoded series data */
 	_simpleEncoding: function(options) {
-		var minValue = (options.minValue == $.gchart.calculate ?
+		var minValue = (options.minValue == plugin.calculate ?
 			this._calculateMinValue(options.series) : options.minValue);
-		var maxValue = (options.maxValue == $.gchart.calculate ?
+		var maxValue = (options.maxValue == plugin.calculate ?
 			this._calculateMaxValue(options.series) : options.maxValue);
 		var data = '';
 		for (var i = 0; i < options.series.length; i++) {
@@ -1295,9 +1305,9 @@ $.extend(GChart.prototype, {
 	   @param  options  (object) the settings for this Google chart instance
 	   @return  (string) the encoded series data */
 	_extendedEncoding: function(options) {
-		var minValue = (options.minValue == $.gchart.calculate ?
+		var minValue = (options.minValue == plugin.calculate ?
 			this._calculateMinValue(options.series) : options.minValue);
-		var maxValue = (options.maxValue == $.gchart.calculate ?
+		var maxValue = (options.maxValue == plugin.calculate ?
 			this._calculateMaxValue(options.series) : options.maxValue);
 		var data = '';
 		for (var i = 0; i < options.series.length; i++) {
@@ -1620,42 +1630,47 @@ function initNumberFormat(type, prefix, suffix, precision, showX, zeroes, separa
 		showX: showX || false, zeroes: zeroes || false, separators: separators || false};
 }
 
-/* jQuery extend now ignores nulls!
-   @param  target  (object) the object to extend
-   @param  props   (object) the new attributes to add
-   @return  (object) the updated object */
-function extendRemove(target, props) {
-	$.extend(target, props);
-	for (var name in props) {
-		if (props[name] == null) {
-			target[name] = null;
-		}
+// The list of commands that return values and don't permit chaining
+var getters = ['current'];
+
+/* Determine whether a command is a getter and doesn't permit chaining.
+   @param  command    (string, optional) the command to run
+   @param  otherArgs  ([], optional) any other arguments for the command
+   @return  true if the command is a getter, false if not */
+function isNotChained(command, otherArgs) {
+	if (command == 'option' && (otherArgs.length == 0 ||
+			(otherArgs.length == 1 && typeof otherArgs[0] == 'string'))) {
+		return true;
 	}
-	return target;
+	return $.inArray(command, getters) > -1;
 }
 
 /* Attach the Google chart functionality to a jQuery selection.
-   @param  command  (string) the command to run (optional, default 'attach')
-   @param  options  (object) the new settings to use for these Google chart instances
-   @return  (jQuery object) for chaining further calls */
+   @param  options  (object) the new settings to use for these instances (optional) or
+                    (string) the command to run (optional)
+   @return  (jQuery) for chaining further calls or
+            (any) getter value */
 $.fn.gchart = function(options) {
 	var otherArgs = Array.prototype.slice.call(arguments, 1);
-	if (options == 'current') {
-		return $.gchart['_' + options + 'GChart'].
-			apply($.gchart, [this[0]].concat(otherArgs));
+	if (isNotChained(options, otherArgs)) {
+		return plugin['_' + options + 'Plugin'].
+			apply(plugin, [this[0]].concat(otherArgs));
 	}
 	return this.each(function() {
 		if (typeof options == 'string') {
-			$.gchart['_' + options + 'GChart'].
-				apply($.gchart, [this].concat(otherArgs));
+			if (!plugin['_' + options + 'Plugin']) {
+				throw 'Unknown command: ' + options;
+			}
+			plugin['_' + options + 'Plugin'].
+				apply(plugin, [this].concat(otherArgs));
 		}
 		else {
-			$.gchart._attachGChart(this, options);
+			plugin._attachPlugin(this, options || {});
 		}
 	});
 };
 
 /* Initialise the Google chart functionality. */
-$.gchart = new GChart(); // singleton instance
+var plugin = $.gchart = new GChart(); // Singleton instance
 
 })(jQuery);
