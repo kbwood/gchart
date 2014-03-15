@@ -8,11 +8,12 @@
 		"graph",
 		"maps",
 		"pie",
-		"QR code",
+		"QR",
 		"ui",
 		"visualization"
+		"visualisation"
 	],
-	"version": "1.5.0",
+	"version": "2.0.0",
 	"author": {
 		"name": "Keith Wood",
 		"url": "http://keith-wood.name/"
@@ -35,6 +36,6 @@
 	"docs": "http://keith-wood.name/gChartRef.html",
 	"download": "http://keith-wood.name/gChart.html",
 	"dependencies": {
-		"jquery": ">=1.4"
+		"jquery": ">=1.7"
 	}
 }
